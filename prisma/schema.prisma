@@ -1,0 +1,177 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+  HEAD
+}
+
+enum MonitorStatus {
+  PENDING
+  UP
+  DOWN
+  PAUSED
+}
+
+enum CheckResultStatus {
+  SUCCESS
+  FAILED
+}
+
+enum AlertType {
+  DOWN
+  RECOVERY
+}
+
+enum AlertStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// Model Otentikasi (Sesuai spesifikasi Better Auth)
+model User {
+  id            String     @id @default(cuid())
+  name          String
+  email         String     @unique
+  emailVerified Boolean    @default(false)
+  image         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  endpoints     Endpoint[]
+  alerts        Alert[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@map("verifications")
+}
+
+// Model Inti Monitoring
+model Endpoint {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  url             String
+  method          HttpMethod    @default(GET)
+  intervalSeconds Int           @default(60)
+  timeoutMs       Int           @default(10000)
+  expectedStatus  Int[]         @default([200])
+  status          MonitorStatus @default(PENDING)
+  isActive        Boolean       @default(true)
+  lastCheckedAt   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  configuration   EndpointConfiguration?
+  checks          MonitorCheck[]
+  alerts          Alert[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([isActive])
+  @@map("endpoints")
+}
+
+model EndpointConfiguration {
+  id          String   @id @default(cuid())
+  endpointId  String   @unique
+  endpoint    Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  headers     Json?    // Menyimpan key-value request headers
+  body        String?  // Request body (JSON/text)
+  headerRules Json?    // Rule validasi response header
+  bodyRules   Json?    // Rule validasi response body
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("endpoint_configurations")
+}
+
+model MonitorCheck {
+  id             String            @id @default(cuid())
+  endpointId     String
+  endpoint       Endpoint          @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  status         CheckResultStatus
+  httpStatus     Int?
+  responseTimeMs Float?
+  errorMessage   String?
+  checkedAt      DateTime          @default(now())
+
+  // Composite index untuk efisiensi query riwayat & agregasi
+  @@index([endpointId, checkedAt(sort: Desc)])
+  @@index([checkedAt])
+  @@map("monitor_checks")
+}
+
+model Alert {
+  id         String      @id @default(cuid())
+  endpointId String
+  endpoint   Endpoint    @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       AlertType
+  status     AlertStatus @default(PENDING)
+  message    String?
+  createdAt  DateTime    @default(now())
+  sentAt     DateTime?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([endpointId])
+  @@map("alerts")
+}

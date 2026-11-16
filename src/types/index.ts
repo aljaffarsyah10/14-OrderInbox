@@ -21,7 +21,13 @@ export interface HeaderRule {
 }
 
 export interface BodyRule {
-  type: "JSON_PROPERTY_EQUALS" | "BODY_CONTAINS" | "BODY_REGEX";
+  type:
+    | "JSON_PROPERTY_EQUALS"
+    | "BODY_CONTAINS"
+    | "BODY_REGEX"
+    | "CONTAINS_TEXT"
+    | "NOT_CONTAINS_TEXT"
+    | "JSON_PROPERTY_EXISTS";
   path?: string;
   value: string;
 }
