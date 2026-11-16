@@ -8,7 +8,7 @@ Document Reference: `PRD and Playbook.md`
 | **Phase 2** | Technical Planning & Architecture | ✅ Completed | `phase 2: technical architecture` |
 | **Phase 3** | UI/UX Planning & Design System | ✅ Completed | `phase 3: ui ux planning` |
 | **Phase 4** | Frontend Foundation & Application Shell | ✅ Completed | `phase 4: frontend foundation` |
-| **Phase 5** | Core Frontend Feature Development | ⏳ Pending | `phase 5: core frontend features` |
+| **Phase 5** | Core Frontend Feature Development | ✅ Completed | `phase 5: core frontend features` |
 | **Phase 6** | Backend & Core Business Logic | ⏳ Pending | `phase 6: backend & business logic` |
 | **Phase 7** | Frontend & Backend Integration | ⏳ Pending | `phase 7: frontend backend integration` |
 | **Phase 8** | Additional Features & Product Completion | ⏳ Pending | `phase 8: additional features` |
@@ -22,3 +22,4 @@ Document Reference: `PRD and Playbook.md`
 - **Phase 2**: Completed (`TECHNICAL_PLAN.md` generated with full architecture).
 - **Phase 3**: Completed (`docs/UI_UX_GUIDE.md` generated with visual direction, tokens, wireframes, and component inventory).
 - **Phase 4**: Completed (Dark-mode first CSS tokens & globals, shadcn/ui & reusable components, responsive application shell with collapsible desktop sidebar & mobile drawer, sticky topbar with dynamic breadcrumbs, and placeholder pages for `/`, `/login`, `/register`, `/dashboard`, `/dashboard/endpoints`, `/dashboard/endpoints/new`, `/dashboard/endpoints/[id]`, and `/dashboard/settings`. Build, lint, and typecheck all pass cleanly).
+- **Phase 5**: Completed (Core frontend features implemented with isolated mock services: KPI summary cards, incident feed with active/green state alerts, endpoint catalog with live search & multi-filter & pagination & dropdown actions, endpoint creation and edit forms with React Hook Form + Zod schema validation & dynamic headers/body rules, endpoint details with Recharts latency area charts, 90-day interactive uptime sparkline, execution check logs, loading skeletons, and empty states. ESLint, TypeScript typecheck, and Next.js production build all pass with code 0).

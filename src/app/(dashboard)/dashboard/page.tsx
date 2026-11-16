@@ -1,3 +1,6 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -5,13 +8,15 @@ import {
   Clock,
   ExternalLink,
   Plus,
-  TrendingUp,
+  AlertTriangle,
   ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { MethodBadge } from "@/components/endpoints/method-badge";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { IncidentFeed } from "@/components/dashboard/incident-feed";
 import {
   Table,
   TableBody,
@@ -20,76 +25,85 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-interface MockEndpoint {
-  id: string;
-  name: string;
-  url: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  status: "UP" | "DOWN" | "PAUSED";
-  latency: number;
-  uptime24h: number;
-  lastChecked: string;
-}
-
-const mockRecentEndpoints: MockEndpoint[] = [
-  {
-    id: "ep_chk_01",
-    name: "Checkout API Service",
-    url: "https://api.mystore.com/v1/checkout",
-    method: "POST",
-    status: "UP",
-    latency: 185,
-    uptime24h: 99.98,
-    lastChecked: "12s ago",
-  },
-  {
-    id: "ep_auth_02",
-    name: "User Auth Gateway",
-    url: "https://auth.mystore.com/oauth/token",
-    method: "GET",
-    status: "UP",
-    latency: 88,
-    uptime24h: 100.0,
-    lastChecked: "24s ago",
-  },
-  {
-    id: "ep_strp_03",
-    name: "Stripe Webhook Relay",
-    url: "https://hook.mystore.com/inbound/stripe",
-    method: "POST",
-    status: "UP",
-    latency: 240,
-    uptime24h: 99.95,
-    lastChecked: "45s ago",
-  },
-  {
-    id: "ep_inv_04",
-    name: "Inventory Sync Cron",
-    url: "https://inv.mystore.com/v2/delta-sync",
-    method: "PUT",
-    status: "UP",
-    latency: 510,
-    uptime24h: 99.82,
-    lastChecked: "1m ago",
-  },
-];
+import { endpointMockService } from "@/features/endpoints/mocks/endpoint-mock-service";
+import { monitoringMockService } from "@/features/monitoring/mocks/monitoring-mock-service";
+import { Endpoint, DashboardSummary, IncidentAlert } from "@/types";
 
 export default function DashboardOverviewPage() {
+  const [endpoints, setEndpoints] = React.useState<Endpoint[]>([]);
+  const [summary, setSummary] = React.useState<DashboardSummary | null>(null);
+  const [incidents, setIncidents] = React.useState<IncidentAlert[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  const handleRefresh = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [eps, sum, incs] = await Promise.all([
+        endpointMockService.getAll(),
+        monitoringMockService.getDashboardSummary(),
+        monitoringMockService.getRecentIncidents(),
+      ]);
+      setEndpoints(eps);
+      setSummary(sum);
+      setIncidents(incs);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      endpointMockService.getAll(),
+      monitoringMockService.getDashboardSummary(),
+      monitoringMockService.getRecentIncidents(),
+    ]).then(([eps, sum, incs]) => {
+      if (isMounted) {
+        setEndpoints(eps);
+        setSummary(sum);
+        setIncidents(incs);
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const recentEndpoints = endpoints.slice(0, 5);
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            Dashboard Overview
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Dashboard Overview
+            </h1>
+            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
+              Mock Telemetry
+            </span>
+          </div>
           <p className="text-sm text-slate-400 mt-1">
             Real-time health status and performance telemetry across active monitors
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="h-9 gap-1.5 text-xs text-slate-300 hover:text-white"
+          >
+            <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+
           <Button
             asChild
             className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9"
@@ -106,60 +120,46 @@ export default function DashboardOverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="Total Monitored"
-          value="14 Active"
-          subValue="+2 added this week"
-          trend={{ value: "↑ 2 monitors", isPositive: true }}
+          value={summary ? `${summary.totalEndpoints} Monitors` : "--"}
+          subValue={`${summary?.activeEndpoints ?? 0} actively pinging`}
+          trend={{ value: `${summary?.upEndpoints ?? 0} UP / ${summary?.downEndpoints ?? 0} DOWN`, isPositive: (summary?.downEndpoints ?? 0) === 0 }}
           icon={Activity}
         />
         <MetricCard
           label="24h Avg. Uptime"
-          value="99.94%"
-          subValue="target SLA 99.9%"
-          trend={{ value: "↑ 0.02%", isPositive: true }}
+          value={summary ? `${summary.avgUptime24h}%` : "--"}
+          subValue="Target SLA: 99.9%"
+          trend={{ value: "↑ 0.04% vs yesterday", isPositive: true }}
           icon={CheckCircle2}
         />
         <MetricCard
           label="Avg. Latency"
-          value="142ms"
-          subValue="fast (<200ms)"
-          trend={{ value: "↓ 12ms faster", isPositive: true }}
+          value={summary ? `${summary.avgResponseTimeMs}ms` : "--"}
+          subValue="fast global response (<200ms)"
+          trend={{ value: "↓ 12ms optimized", isPositive: true }}
           icon={Clock}
         />
         <MetricCard
           label="Active Incidents"
-          value="0 Open"
-          subValue="All targets healthy"
-          trend={{ value: "All Clear", isNeutral: true }}
-          icon={TrendingUp}
+          value={summary ? `${summary.downEndpoints} Critical` : "--"}
+          subValue={(summary?.downEndpoints ?? 0) > 0 ? "Attention required" : "All monitors healthy"}
+          trend={{
+            value: (summary?.downEndpoints ?? 0) > 0 ? "Incident Active" : "All Systems Green",
+            isPositive: (summary?.downEndpoints ?? 0) === 0,
+          }}
+          icon={AlertTriangle}
         />
       </div>
 
-      {/* All Systems Green Banner */}
-      <div className="flex items-center justify-between p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
-        <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-            <CheckCircle2 className="size-4" />
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold text-emerald-200">
-              All monitored endpoints are operating normally
-            </h4>
-            <p className="text-xs text-emerald-400/80">
-              No failed assertions, HTTP timeouts, or DNS anomalies detected in the past 24 hours.
-            </p>
-          </div>
-        </div>
-        <div className="hidden sm:block text-xs font-mono text-emerald-400">
-          Global SLA: 99.98%
-        </div>
-      </div>
+      {/* Incident Alert Feed Component */}
+      <IncidentFeed incidents={incidents} />
 
-      {/* Recently Monitored Endpoints */}
+      {/* Recently Monitored Endpoints Table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between p-4 md:px-6 border-b border-border">
           <div>
             <h3 className="text-base font-semibold text-white">
-              Recently Monitored Endpoints
+              Active Monitored Endpoints
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Live checks running on automated sub-minute intervals
@@ -172,7 +172,7 @@ export default function DashboardOverviewPage() {
             className="text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
           >
             <Link href="/dashboard/endpoints" className="flex items-center gap-1">
-              <span>View All Endpoints</span>
+              <span>View All Endpoints ({endpoints.length})</span>
               <ArrowRight className="size-3.5" />
             </Link>
           </Button>
@@ -198,15 +198,15 @@ export default function DashboardOverviewPage() {
                   24h Uptime
                 </TableHead>
                 <TableHead className="text-xs font-semibold text-slate-400 uppercase font-mono text-right">
-                  Last Check
+                  Last Checked
                 </TableHead>
                 <TableHead className="w-[80px] text-xs font-semibold text-slate-400 uppercase font-mono text-right">
-                  Actions
+                  Inspect
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockRecentEndpoints.map((ep) => (
+              {recentEndpoints.map((ep) => (
                 <TableRow
                   key={ep.id}
                   className="border-border hover:bg-slate-800/40 transition-colors"
@@ -231,13 +231,18 @@ export default function DashboardOverviewPage() {
                     <MethodBadge method={ep.method} />
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs tabular-nums text-slate-300">
-                    {ep.latency}ms
+                    {ep.currentLatencyMs ? `${ep.currentLatencyMs}ms` : "--"}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs tabular-nums text-emerald-400 font-medium">
-                    {ep.uptime24h.toFixed(2)}%
+                    {ep.uptime24h ? `${ep.uptime24h.toFixed(2)}%` : "--"}
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground font-mono">
-                    {ep.lastChecked}
+                    {ep.lastCheckedAt
+                      ? new Date(ep.lastCheckedAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "--"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

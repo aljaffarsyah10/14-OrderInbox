@@ -1,80 +1,168 @@
+"use client";
+
 import * as React from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   ArrowLeft,
   Activity,
   CheckCircle2,
   Clock,
   Play,
-  Pause,
+  Settings,
   ShieldCheck,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { MethodBadge } from "@/components/endpoints/method-badge";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { LatencyChart } from "@/components/endpoints/latency-chart";
+import { UptimeBar } from "@/components/endpoints/uptime-bar";
+import { ExecutionHistoryTable } from "@/components/endpoints/execution-history-table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { endpointMockService } from "@/features/endpoints/mocks/endpoint-mock-service";
+import { monitoringMockService } from "@/features/monitoring/mocks/monitoring-mock-service";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Endpoint,
+  LatencyDataPoint,
+  DayUptimeSummary,
+  MonitorCheck,
+} from "@/types";
 
-interface CheckLog {
-  timestamp: string;
-  status: "UP" | "DOWN";
-  statusCode: number;
-  latencyMs: number;
-  reason: string;
-}
+export default function EndpointDetailPage() {
+  const params = useParams();
+  const id = params?.id as string;
 
-const mockExecutionLogs: CheckLog[] = [
-  {
-    timestamp: "2026-11-17 10:12:00",
-    status: "UP",
-    statusCode: 200,
-    latencyMs: 142,
-    reason: "Assertion OK (Found 'status':'ok')",
-  },
-  {
-    timestamp: "2026-11-17 10:11:00",
-    status: "UP",
-    statusCode: 200,
-    latencyMs: 138,
-    reason: "Assertion OK (Found 'status':'ok')",
-  },
-  {
-    timestamp: "2026-11-17 10:10:00",
-    status: "UP",
-    statusCode: 200,
-    latencyMs: 145,
-    reason: "Assertion OK (Found 'status':'ok')",
-  },
-  {
-    timestamp: "2026-11-17 10:09:00",
-    status: "DOWN",
-    statusCode: 504,
-    latencyMs: 10000,
-    reason: "Gateway Timeout (>10000ms)",
-  },
-  {
-    timestamp: "2026-11-17 10:08:00",
-    status: "UP",
-    statusCode: 200,
-    latencyMs: 160,
-    reason: "Assertion OK",
-  },
-];
+  const [endpoint, setEndpoint] = React.useState<Endpoint | null>(null);
+  const [latencyData, setLatencyData] = React.useState<LatencyDataPoint[]>([]);
+  const [uptimeDays, setUptimeDays] = React.useState<DayUptimeSummary[]>([]);
+  const [checks, setChecks] = React.useState<MonitorCheck[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isCheckingNow, setIsCheckingNow] = React.useState(false);
+  const [checkResultToast, setCheckResultToast] = React.useState<string | null>(null);
+  const [timeRange, setTimeRange] = React.useState<"24h" | "7d" | "30d">("24h");
 
-async function EndpointDetailContent({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
+  const refreshAllData = React.useCallback(async () => {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const ep = await endpointMockService.getById(id);
+      if (ep) {
+        setEndpoint(ep);
+        const [latency, uptime, checkLogs] = await Promise.all([
+          monitoringMockService.getEndpointLatencySeries(id, ep.currentLatencyMs || 140),
+          monitoringMockService.getEndpoint90DayUptime(id),
+          monitoringMockService.getEndpointChecks(id, 15),
+        ]);
+        setLatencyData(latency);
+        setUptimeDays(uptime);
+        setChecks(checkLogs);
+      } else {
+        setEndpoint(null);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id]);
+
+  React.useEffect(() => {
+    if (!id) return;
+    let isMounted = true;
+
+    endpointMockService.getById(id).then(async (ep) => {
+      if (!isMounted) return;
+      if (ep) {
+        const [latency, uptime, checkLogs] = await Promise.all([
+          monitoringMockService.getEndpointLatencySeries(id, ep.currentLatencyMs || 140),
+          monitoringMockService.getEndpoint90DayUptime(id),
+          monitoringMockService.getEndpointChecks(id, 15),
+        ]);
+        if (isMounted) {
+          setEndpoint(ep);
+          setLatencyData(latency);
+          setUptimeDays(uptime);
+          setChecks(checkLogs);
+          setIsLoading(false);
+        }
+      } else {
+        if (isMounted) {
+          setEndpoint(null);
+          setIsLoading(false);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  // Handle on-demand manual check trigger
+  const handleManualCheck = async () => {
+    if (!id) return;
+    setIsCheckingNow(true);
+    setCheckResultToast(null);
+
+    try {
+      const res = await endpointMockService.triggerManualCheck(id);
+      setCheckResultToast(
+        `Instant check finished: HTTP ${res.httpStatus} • ${res.latencyMs}ms • Status ${res.status}`
+      );
+      // Reload updated check logs and latency
+      const [ep, updatedChecks] = await Promise.all([
+        endpointMockService.getById(id),
+        monitoringMockService.getEndpointChecks(id, 15),
+      ]);
+      if (ep) setEndpoint(ep);
+      setChecks(updatedChecks);
+    } finally {
+      setIsCheckingNow(false);
+      setTimeout(() => {
+        setCheckResultToast(null);
+      }, 5000);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-9 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-64 rounded-md" />
+            <Skeleton className="h-4 w-96 rounded-md" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!endpoint) {
+    return (
+      <div className="py-12">
+        <EmptyState
+          title="Endpoint Not Found"
+          description={`The requested monitor with identifier "${id}" does not exist in the mock telemetry catalog.`}
+          action={
+            <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white">
+              <Link href="/dashboard/endpoints">Return to Endpoints</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -93,205 +181,131 @@ async function EndpointDetailContent({
           </Button>
 
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-2xl font-bold tracking-tight text-white">
-                Checkout API Gateway
+                {endpoint.name}
               </h1>
-              <StatusBadge status="UP" />
-              <MethodBadge method="POST" />
+              <StatusBadge status={endpoint.status} />
+              <MethodBadge method={endpoint.method} />
             </div>
-            <p className="text-xs font-mono text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
-              <span>https://api.mystore.com/v1/checkout</span>
-              <span>&bull;</span>
-              <span className="text-muted-foreground">ID: {id}</span>
-              <span>&bull;</span>
-              <span className="text-emerald-400">Checked 12s ago</span>
-            </p>
+            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono flex-wrap">
+              <a
+                href={endpoint.url}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-indigo-400 flex items-center gap-1 transition-colors"
+              >
+                <span>{endpoint.url}</span>
+                <ExternalLink className="size-3" />
+              </a>
+              <span>•</span>
+              <span>Interval: {endpoint.intervalSeconds}s</span>
+              <span>•</span>
+              <span>Timeout: {endpoint.timeoutMs}ms</span>
+            </div>
           </div>
         </div>
 
-        {/* Header Actions */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls */}
+        <div className="flex items-center gap-2.5">
           <Button
+            type="button"
             variant="outline"
             size="sm"
-            className="border-slate-700 text-slate-300 hover:text-white gap-1.5 h-8 text-xs"
+            onClick={handleManualCheck}
+            disabled={isCheckingNow}
+            className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 h-9 gap-1.5 text-xs font-medium"
           >
-            <Play className="size-3.5" />
-            <span>Test Now</span>
+            <Play className={`size-3.5 ${isCheckingNow ? "animate-spin" : ""}`} />
+            <span>{isCheckingNow ? "Executing Check..." : "Test Now"}</span>
           </Button>
+
           <Button
+            asChild
             variant="outline"
             size="sm"
-            className="border-slate-700 text-slate-300 hover:text-white gap-1.5 h-8 text-xs"
+            className="border-border text-slate-300 hover:text-white h-9 gap-1.5 text-xs"
           >
-            <Pause className="size-3.5" />
-            <span>Pause Monitor</span>
+            <Link href={`/dashboard/endpoints/${endpoint.id}/edit`}>
+              <Settings className="size-3.5" />
+              <span>Edit Monitor</span>
+            </Link>
           </Button>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Manual Check Result Notification */}
+      {checkResultToast && (
+        <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 flex items-center gap-2.5 text-xs font-mono animate-in fade-in duration-200">
+          <Check className="size-4 text-emerald-400 shrink-0" />
+          <span>{checkResultToast}</span>
+        </div>
+      )}
+
+      {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="Current Latency"
-          value="142ms"
-          subValue="Optimal (<200ms)"
-          trend={{ value: "↓ 4ms faster", isPositive: true }}
+          value={endpoint.currentLatencyMs ? `${endpoint.currentLatencyMs}ms` : "--"}
+          subValue={
+            (endpoint.currentLatencyMs || 0) < 200
+              ? "Fast (<200ms)"
+              : (endpoint.currentLatencyMs || 0) < 1000
+              ? "Normal latency"
+              : "High latency alert"
+          }
+          trend={{
+            value: (endpoint.currentLatencyMs || 0) < 200 ? "Healthy" : "Elevated",
+            isPositive: (endpoint.currentLatencyMs || 0) < 200,
+          }}
           icon={Clock}
         />
         <MetricCard
           label="24h Uptime"
-          value="99.98%"
-          subValue="1 incident resolved"
-          trend={{ value: "99.9% SLA target", isPositive: true }}
+          value={endpoint.uptime24h ? `${endpoint.uptime24h.toFixed(2)}%` : "--"}
+          subValue="Target SLA: 99.9%"
+          trend={{ value: "Operational", isPositive: true }}
           icon={CheckCircle2}
         />
         <MetricCard
-          label="Last HTTP Status"
-          value="200 OK"
-          subValue="Healthy response payload"
-          trend={{ value: "Verified", isPositive: true }}
-          icon={Activity}
-        />
-        <MetricCard
-          label="SSL Certificate"
-          value="82 Days"
-          subValue="Let's Encrypt Authority X3"
-          trend={{ value: "Valid", isPositive: true }}
+          label="Expected Status"
+          value={endpoint.expectedStatus.join(", ")}
+          subValue={`Timeout: ${endpoint.timeoutMs}ms`}
+          trend={{ value: "Strict Validation", isNeutral: true }}
           icon={ShieldCheck}
         />
+        <MetricCard
+          label="Check Interval"
+          value={`Every ${endpoint.intervalSeconds}s`}
+          subValue={endpoint.isActive ? "Background worker active" : "Monitor paused"}
+          trend={{
+            value: endpoint.isActive ? "Active Schedule" : "Paused",
+            isPositive: endpoint.isActive,
+          }}
+          icon={Activity}
+        />
       </div>
 
-      {/* 90-Day Uptime Sparkline */}
-      <Card className="p-5 bg-card border border-border space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-white">
-              90-Day Continuous Uptime History
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Historical uptime ratio evaluated across all automated hourly checks
-            </p>
-          </div>
-          <span className="text-sm font-bold font-mono text-emerald-400">
-            99.98%
-          </span>
-        </div>
-
-        {/* 90 segments */}
-        <div className="grid grid-cols-45 sm:grid-cols-90 gap-1 h-7 pt-2">
-          {Array.from({ length: 90 }).map((_, idx) => {
-            const isDegraded = idx === 42;
-            return (
-              <div
-                key={idx}
-                className={`h-full rounded-xs transition-colors ${
-                  isDegraded
-                    ? "bg-rose-500 hover:bg-rose-400"
-                    : "bg-emerald-500/80 hover:bg-emerald-400"
-                }`}
-                title={`Day ${90 - idx} ago: ${isDegraded ? "98.2% (1 downtime incident)" : "100.0% operational"}`}
-              />
-            );
-          })}
-        </div>
-        <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
-          <span>90 days ago</span>
-          <span>Today</span>
-        </div>
-      </Card>
-
-      {/* Execution Logs Table */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="flex items-center justify-between p-4 md:px-6 border-b border-border">
-          <div>
-            <h3 className="text-base font-semibold text-white">
-              Recent Check Execution History
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Detailed breakdown of recent HTTP requests, latencies, and payload assertions
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-mono">
-              Live checks auto-refreshing
-            </span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-slate-900/60">
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="w-[180px] text-xs font-semibold text-slate-400 uppercase font-mono">
-                  Timestamp (UTC)
-                </TableHead>
-                <TableHead className="w-[110px] text-xs font-semibold text-slate-400 uppercase font-mono">
-                  Status
-                </TableHead>
-                <TableHead className="w-[100px] text-xs font-semibold text-slate-400 uppercase font-mono">
-                  HTTP Code
-                </TableHead>
-                <TableHead className="w-[110px] text-xs font-semibold text-slate-400 uppercase font-mono text-right">
-                  Latency
-                </TableHead>
-                <TableHead className="text-xs font-semibold text-slate-400 uppercase font-mono">
-                  Reason / Assertion Result
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockExecutionLogs.map((log, idx) => (
-                <TableRow
-                  key={idx}
-                  className="border-border hover:bg-slate-800/40 transition-colors"
-                >
-                  <TableCell className="font-mono text-xs text-slate-300">
-                    {log.timestamp}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={log.status} />
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${
-                        log.statusCode === 200
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                      }`}
-                    >
-                      {log.statusCode}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs tabular-nums text-slate-300">
-                    {log.latencyMs}ms
-                  </TableCell>
-                  <TableCell className="text-xs font-mono text-slate-400">
-                    {log.reason}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      {/* Latency History Chart */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <LatencyChart
+          data={latencyData}
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+        />
       </div>
+
+      {/* 90-Day Uptime Sparkline Card */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <UptimeBar days={uptimeDays} />
+      </div>
+
+      {/* Execution Checks Table */}
+      <ExecutionHistoryTable
+        checks={checks}
+        onRefresh={refreshAllData}
+        isLoading={isLoading}
+      />
     </div>
-  );
-}
-
-export default function EndpointDetailPage(props: {
-  params: Promise<{ id: string }>;
-}) {
-  return (
-    <React.Suspense
-      fallback={
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          Loading monitor details...
-        </div>
-      }
-    >
-      <EndpointDetailContent params={props.params} />
-    </React.Suspense>
   );
 }
