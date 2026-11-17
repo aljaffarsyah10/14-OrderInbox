@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { LatencyDataPoint } from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { calculateLatencyStats } from "@/lib/api/monitoring";
 
 interface LatencyChartProps {
   data: LatencyDataPoint[];
@@ -33,12 +34,7 @@ export function LatencyChart({
   );
 
   const stats = React.useMemo(() => {
-    if (!data || data.length === 0) return { min: 0, max: 0, avg: 0 };
-    const values = data.map((d) => d.latencyMs);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
-    return { min, max, avg };
+    return calculateLatencyStats(data.map((d) => d.latencyMs));
   }, [data]);
 
   if (!isMounted) {
@@ -62,22 +58,27 @@ export function LatencyChart({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mr-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mr-2 flex-wrap">
             <span>Avg: <strong className="text-slate-200">{stats.avg}ms</strong></span>
             <span>•</span>
             <span>Min: <strong className="text-emerald-400">{stats.min}ms</strong></span>
             <span>•</span>
             <span>Max: <strong className="text-amber-400">{stats.max}ms</strong></span>
+            <span>•</span>
+            <span>P95: <strong className="text-indigo-400">{stats.p95}ms</strong></span>
           </div>
 
-          <div className="flex items-center rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-xs font-medium">
+          <div className="flex items-center rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-xs font-medium" role="tablist">
             {(["24h", "7d", "30d"] as const).map((range) => (
               <button
                 key={range}
                 type="button"
+                role="tab"
+                aria-selected={timeRange === range}
+                aria-label={`Time range ${range}`}
                 onClick={() => onTimeRangeChange?.(range)}
-                className={`px-2.5 py-1 rounded-md transition-colors ${
+                className={`px-2.5 py-1 rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                   timeRange === range
                     ? "bg-indigo-600 text-white shadow-xs"
                     : "text-slate-400 hover:text-slate-200"

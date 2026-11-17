@@ -43,11 +43,11 @@ export default function DashboardOverviewPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [eps, stats] = await Promise.all([
-        getEndpoints(),
+      const [epsData, stats] = await Promise.all([
+        getEndpoints({ limit: 10 }),
         getDashboardStats(),
       ]);
-      setEndpoints(eps);
+      setEndpoints(epsData.endpoints);
       setSummary(stats.summary);
       setIncidents(stats.recentIncidents);
     } catch (err: unknown) {
@@ -64,12 +64,12 @@ export default function DashboardOverviewPage() {
 
     async function loadInitial() {
       try {
-        const [eps, stats] = await Promise.all([
-          getEndpoints(),
+        const [epsData, stats] = await Promise.all([
+          getEndpoints({ limit: 10 }),
           getDashboardStats(),
         ]);
         if (!ignore) {
-          setEndpoints(eps);
+          setEndpoints(epsData.endpoints);
           setSummary(stats.summary);
           setIncidents(stats.recentIncidents);
         }

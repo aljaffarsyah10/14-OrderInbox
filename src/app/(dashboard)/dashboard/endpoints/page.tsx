@@ -45,58 +45,62 @@ import { Endpoint } from "@/types";
 export default function EndpointsListPage() {
   const router = useRouter();
   const [endpoints, setEndpoints] = React.useState<Endpoint[]>([]);
+  const [pagination, setPagination] = React.useState({
+    page: 1,
+    limit: 8,
+    total: 0,
+    totalPages: 1,
+  });
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [actionMessage, setActionMessage] = React.useState<string | null>(null);
+
+  // Filter & Search States
   const [search, setSearch] = React.useState("");
   const [selectedStatus, setSelectedStatus] = React.useState<string>("ALL");
   const [selectedMethod, setSelectedMethod] = React.useState<string>("ALL");
   const [currentPage, setCurrentPage] = React.useState(1);
   const itemsPerPage = 8;
 
-  const refreshEndpoints = React.useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await getEndpoints();
-      setEndpoints(data);
-    } catch (err: unknown) {
-      console.error("[EndpointsListPage] Fetch failed:", err);
-      const msg = err instanceof Error ? err.message : "Failed to load endpoints";
-      setError(msg);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    let ignore = false;
-
-    async function loadInitial() {
+  const fetchEndpointsList = React.useCallback(
+    async (page: number, query: string, status: string, method: string) => {
+      setIsLoading(true);
+      setError(null);
       try {
-        const data = await getEndpoints();
-        if (!ignore) {
-          setEndpoints(data);
-        }
+        const res = await getEndpoints({
+          page,
+          limit: itemsPerPage,
+          search: query.trim() || undefined,
+          status: status !== "ALL" ? status : undefined,
+          method: method !== "ALL" ? method : undefined,
+        });
+        setEndpoints(res.endpoints);
+        setPagination(res.pagination);
       } catch (err: unknown) {
-        if (!ignore) {
-          console.error("[EndpointsListPage] Fetch failed:", err);
-          const msg = err instanceof Error ? err.message : "Failed to load endpoints";
-          setError(msg);
-        }
+        console.error("[EndpointsListPage] Fetch failed:", err);
+        const msg = err instanceof Error ? err.message : "Failed to load endpoints";
+        setError(msg);
       } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
-    }
+    },
+    [itemsPerPage]
+  );
 
-    loadInitial();
+  // Debounce search query & react to filter/page changes
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchEndpointsList(currentPage, search, selectedStatus, selectedMethod);
+    }, 300);
 
     return () => {
-      ignore = true;
+      clearTimeout(handler);
     };
-  }, []);
+  }, [fetchEndpointsList, currentPage, search, selectedStatus, selectedMethod]);
+
+  const refreshEndpoints = React.useCallback(async () => {
+    await fetchEndpointsList(currentPage, search, selectedStatus, selectedMethod);
+  }, [fetchEndpointsList, currentPage, search, selectedStatus, selectedMethod]);
 
   // Actions
   const handleTogglePause = async (id: string) => {
@@ -129,26 +133,7 @@ export default function EndpointsListPage() {
     }
   };
 
-  // Filtering
-  const filtered = React.useMemo(() => {
-    return endpoints.filter((ep) => {
-      const matchesSearch =
-        ep.name.toLowerCase().includes(search.toLowerCase()) ||
-        ep.url.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus =
-        selectedStatus === "ALL" || ep.status === selectedStatus;
-      const matchesMethod =
-        selectedMethod === "ALL" || ep.method === selectedMethod;
-      return matchesSearch && matchesStatus && matchesMethod;
-    });
-  }, [endpoints, search, selectedStatus, selectedMethod]);
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
-  const paginatedEndpoints = filtered.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const hasActiveFilters = Boolean(search || selectedStatus !== "ALL" || selectedMethod !== "ALL");
 
   return (
     <div className="space-y-6">
@@ -160,7 +145,7 @@ export default function EndpointsListPage() {
               Monitored Endpoints
             </h1>
             <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
-              {endpoints.length} Active Targets
+              {pagination.total} Total Targets
             </span>
           </div>
           <p className="text-sm text-slate-400 mt-1">
@@ -175,7 +160,8 @@ export default function EndpointsListPage() {
             size="sm"
             onClick={refreshEndpoints}
             disabled={isLoading}
-            className="h-9 gap-1.5 text-xs text-slate-300 hover:text-white"
+            aria-label="Refresh endpoints list"
+            className="h-9 gap-1.5 text-xs text-slate-300 hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -183,7 +169,7 @@ export default function EndpointsListPage() {
 
           <Button
             asChild
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9 focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <Link href="/dashboard/endpoints/new">
               <Plus className="size-4" />
@@ -195,12 +181,15 @@ export default function EndpointsListPage() {
 
       {/* Action Feedback Banner */}
       {actionMessage && (
-        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center justify-between">
+        <div
+          role="status"
+          className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center justify-between"
+        >
           <span>{actionMessage}</span>
           <button
             type="button"
             onClick={() => setActionMessage(null)}
-            className="text-emerald-400 hover:text-white text-xs"
+            className="text-emerald-400 hover:text-white text-xs underline focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
           >
             Dismiss
           </button>
@@ -209,7 +198,10 @@ export default function EndpointsListPage() {
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
+        <div
+          role="alert"
+          className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between"
+        >
           <div className="flex items-center gap-2.5">
             <AlertCircle className="size-4 text-rose-400 shrink-0" />
             <span>{error}</span>
@@ -236,22 +228,25 @@ export default function EndpointsListPage() {
               setCurrentPage(1);
             }}
             placeholder="Search endpoint by name or target URL..."
-            className="pl-9 bg-[#0b1120] border-slate-700 h-9 text-xs placeholder:text-slate-400 font-mono"
+            aria-label="Search endpoint by name or URL"
+            className="pl-9 bg-[#0b1120] border-slate-700 h-9 text-xs placeholder:text-slate-400 font-mono focus-visible:ring-2 focus-visible:ring-indigo-500"
           />
         </div>
 
         {/* Status Tabs */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="inline-flex rounded-lg border border-slate-700 bg-[#0b1120] p-1 text-xs">
+          <div className="inline-flex rounded-lg border border-slate-700 bg-[#0b1120] p-1 text-xs" role="tablist">
             {["ALL", "UP", "DOWN", "PAUSED"].map((st) => (
               <button
                 key={st}
                 type="button"
+                role="tab"
+                aria-selected={selectedStatus === st}
                 onClick={() => {
                   setSelectedStatus(st);
                   setCurrentPage(1);
                 }}
-                className={`px-3 py-1 rounded font-mono text-[11px] font-medium transition-colors ${
+                className={`px-3 py-1 rounded font-mono text-[11px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                   selectedStatus === st
                     ? "bg-indigo-600 text-white"
                     : "text-slate-400 hover:text-white"
@@ -271,7 +266,8 @@ export default function EndpointsListPage() {
                 setSelectedMethod(e.target.value);
                 setCurrentPage(1);
               }}
-              className="h-8 rounded-lg border border-slate-700 bg-[#0b1120] px-2.5 text-xs font-mono text-slate-300 focus-visible:outline-none focus-visible:border-indigo-500"
+              aria-label="Filter by HTTP method"
+              className="h-8 rounded-lg border border-slate-700 bg-[#0b1120] px-2.5 text-xs font-mono text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               <option value="ALL">All Methods</option>
               <option value="GET">GET</option>
@@ -294,17 +290,17 @@ export default function EndpointsListPage() {
             <Skeleton className="h-12 w-full rounded-md" />
             <Skeleton className="h-12 w-full rounded-md" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : endpoints.length === 0 ? (
           <div className="p-8">
             <EmptyState
-              title="No Endpoints Found"
+              title={hasActiveFilters ? "No Matching Endpoints Found" : "No Endpoints Found"}
               description={
-                search || selectedStatus !== "ALL" || selectedMethod !== "ALL"
+                hasActiveFilters
                   ? "No monitored targets match your current search and filter parameters."
                   : "You haven't configured any monitoring endpoints yet."
               }
               action={
-                search || selectedStatus !== "ALL" || selectedMethod !== "ALL" ? (
+                hasActiveFilters ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -312,13 +308,18 @@ export default function EndpointsListPage() {
                       setSearch("");
                       setSelectedStatus("ALL");
                       setSelectedMethod("ALL");
+                      setCurrentPage(1);
                     }}
-                    className="border-slate-700 text-slate-300 text-xs"
+                    className="border-slate-700 text-slate-300 text-xs focus-visible:ring-2 focus-visible:ring-indigo-500"
                   >
                     Clear Filters
                   </Button>
                 ) : (
-                  <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs">
+                  <Button
+                    asChild
+                    size="sm"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  >
                     <Link href="/dashboard/endpoints/new">Create First Monitor</Link>
                   </Button>
                 )
@@ -343,78 +344,121 @@ export default function EndpointsListPage() {
                     Interval
                   </TableHead>
                   <TableHead className="text-xs font-semibold text-slate-400 uppercase font-mono text-right">
-                    Avg Latency
+                    Current Latency
                   </TableHead>
                   <TableHead className="text-xs font-semibold text-slate-400 uppercase font-mono text-right">
                     24h Uptime
                   </TableHead>
-                  <TableHead className="w-[110px] text-xs font-semibold text-slate-400 uppercase font-mono text-right">
+                  <TableHead className="w-[80px] text-xs font-semibold text-slate-400 uppercase font-mono text-right">
                     Actions
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedEndpoints.map((ep) => (
+                {endpoints.map((ep) => (
                   <TableRow
                     key={ep.id}
-                    className="border-border hover:bg-slate-800/40 transition-colors"
+                    className="border-border hover:bg-slate-800/40 transition-colors group cursor-pointer"
+                    onClick={(e) => {
+                      // Prevent navigation if user clicked inside action buttons/dropdown
+                      const target = e.target as HTMLElement;
+                      if (!target.closest("[data-no-navigate]")) {
+                        router.push(`/dashboard/endpoints/${ep.id}`);
+                      }
+                    }}
                   >
                     <TableCell>
                       <StatusBadge status={ep.status} />
                     </TableCell>
+
                     <TableCell>
-                      <div className="flex flex-col">
+                      <div className="space-y-1">
                         <Link
                           href={`/dashboard/endpoints/${ep.id}`}
-                          className="font-medium text-slate-200 hover:text-indigo-400 transition-colors flex items-center gap-1.5"
+                          className="font-semibold text-sm text-white group-hover:text-indigo-400 transition-colors inline-block focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
                         >
-                          <span>{ep.name}</span>
+                          {ep.name}
                         </Link>
-                        <span className="text-xs font-mono text-muted-foreground truncate max-w-xs md:max-w-md">
-                          {ep.url}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+                          <span className="truncate max-w-[280px] sm:max-w-[400px]">
+                            {ep.url}
+                          </span>
+                          <a
+                            href={ep.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            data-no-navigate
+                            aria-label={`Open external URL ${ep.url}`}
+                            className="text-slate-400 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+                          >
+                            <ExternalLink className="size-3" />
+                          </a>
+                        </div>
                       </div>
                     </TableCell>
+
                     <TableCell>
                       <MethodBadge method={ep.method} />
                     </TableCell>
-                    <TableCell className="text-xs font-mono text-slate-300">
+
+                    <TableCell className="font-mono text-xs text-slate-300">
                       {ep.intervalSeconds}s
                     </TableCell>
-                    <TableCell className="text-right font-mono text-xs tabular-nums">
+
+                    <TableCell className="text-right font-mono text-xs tabular-nums text-slate-200">
                       {ep.currentLatencyMs !== null && ep.currentLatencyMs !== undefined ? (
-                        <span className="text-slate-300">{Math.round(ep.currentLatencyMs)}ms</span>
+                        <span
+                          className={
+                            ep.currentLatencyMs > 1000
+                              ? "text-rose-400 font-medium"
+                              : ep.currentLatencyMs > 300
+                              ? "text-amber-400 font-medium"
+                              : "text-emerald-400 font-medium"
+                          }
+                        >
+                          {Math.round(ep.currentLatencyMs)}ms
+                        </span>
                       ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
+                        <span className="text-slate-500">--</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-xs tabular-nums">
+
+                    <TableCell className="text-right font-mono text-xs tabular-nums font-semibold text-slate-200">
                       {ep.uptime24h !== null && ep.uptime24h !== undefined ? (
                         <span
                           className={
                             ep.uptime24h >= 99
-                              ? "text-emerald-400 font-medium"
-                              : "text-rose-400 font-medium"
+                              ? "text-emerald-400"
+                              : ep.uptime24h >= 95
+                              ? "text-amber-400"
+                              : "text-rose-400"
                           }
                         >
                           {ep.uptime24h.toFixed(1)}%
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
+                        <span className="text-slate-500">100.0%</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+
+                    <TableCell className="text-right" data-no-navigate>
                       <div className="flex items-center justify-end gap-1">
                         <Button
-                          asChild
                           variant="ghost"
                           size="icon-xs"
-                          className="text-slate-400 hover:text-white"
-                          title="View Details"
+                          onClick={() => handleTogglePause(ep.id)}
+                          aria-label={ep.isActive ? `Pause monitor ${ep.name}` : `Resume monitor ${ep.name}`}
+                          className={`size-7 ${
+                            ep.isActive
+                              ? "text-slate-400 hover:text-amber-400"
+                              : "text-amber-400 hover:text-emerald-400"
+                          } focus-visible:ring-2 focus-visible:ring-indigo-500`}
                         >
-                          <Link href={`/dashboard/endpoints/${ep.id}`}>
-                            <ExternalLink className="size-3.5" />
-                          </Link>
+                          {ep.isActive ? (
+                            <Pause className="size-3.5" />
+                          ) : (
+                            <Play className="size-3.5" />
+                          )}
                         </Button>
 
                         <DropdownMenu>
@@ -423,40 +467,40 @@ export default function EndpointsListPage() {
                               <Button
                                 variant="ghost"
                                 size="icon-xs"
-                                className="text-slate-400 hover:text-white"
-                                title="More actions"
+                                aria-label={`Actions for ${ep.name}`}
+                                className="size-7 text-slate-400 hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
                               >
                                 <MoreVertical className="size-3.5" />
                               </Button>
                             }
                           />
-                          <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuContent align="end" className="w-44 bg-slate-900 border-border">
                             <DropdownMenuItem
                               onClick={() => router.push(`/dashboard/endpoints/${ep.id}/edit`)}
-                              className="flex items-center gap-2 cursor-pointer"
+                              className="flex items-center gap-2 cursor-pointer text-slate-200 hover:text-white"
                             >
-                              <Edit2 className="size-3.5" />
+                              <Edit2 className="size-3.5 text-slate-400" />
                               <span>Edit Monitor</span>
                             </DropdownMenuItem>
 
                             <DropdownMenuItem
                               onClick={() => handleTogglePause(ep.id)}
-                              className="flex items-center gap-2 cursor-pointer"
+                              className="flex items-center gap-2 cursor-pointer text-slate-200 hover:text-white"
                             >
-                              {ep.status === "PAUSED" ? (
+                              {ep.isActive ? (
                                 <>
-                                  <Play className="size-3.5 text-emerald-400" />
-                                  <span>Resume Checks</span>
+                                  <Pause className="size-3.5 text-amber-400" />
+                                  <span>Pause Monitor</span>
                                 </>
                               ) : (
                                 <>
-                                  <Pause className="size-3.5 text-amber-400" />
-                                  <span>Pause Checks</span>
+                                  <Play className="size-3.5 text-emerald-400" />
+                                  <span>Resume Monitor</span>
                                 </>
                               )}
                             </DropdownMenuItem>
 
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator className="bg-border" />
 
                             <DropdownMenuItem
                               onClick={() => handleDelete(ep.id, ep.name)}
@@ -477,32 +521,34 @@ export default function EndpointsListPage() {
         )}
 
         {/* Pagination Footer */}
-        {filtered.length > 0 && (
-          <div className="flex items-center justify-between p-4 border-t border-border text-xs text-muted-foreground font-mono">
+        {pagination.total > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-border text-xs text-muted-foreground font-mono gap-3">
             <span>
-              Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filtered.length)} -{" "}
-              {Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length} endpoints
+              Showing {Math.min((currentPage - 1) * itemsPerPage + 1, pagination.total)} -{" "}
+              {Math.min(currentPage * itemsPerPage, pagination.total)} of {pagination.total} endpoints
             </span>
 
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="icon-xs"
-                disabled={currentPage === 1}
+                disabled={currentPage <= 1 || isLoading}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="size-7 border-slate-700 text-slate-300 disabled:opacity-40"
+                aria-label="Previous page"
+                className="size-7 border-slate-700 text-slate-300 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
                 <ChevronLeft className="size-3.5" />
               </Button>
               <span className="px-2">
-                Page {currentPage} of {totalPages}
+                Page {currentPage} of {pagination.totalPages}
               </span>
               <Button
                 variant="outline"
                 size="icon-xs"
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="size-7 border-slate-700 text-slate-300 disabled:opacity-40"
+                disabled={currentPage >= pagination.totalPages || isLoading}
+                onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                aria-label="Next page"
+                className="size-7 border-slate-700 text-slate-300 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
                 <ChevronRight className="size-3.5" />
               </Button>

@@ -24,7 +24,7 @@ import { UptimeBar } from "@/components/endpoints/uptime-bar";
 import { ExecutionHistoryTable } from "@/components/endpoints/execution-history-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getEndpoint, triggerManualCheck } from "@/lib/api/endpoints";
+import { getEndpoint, getEndpointHistory, triggerManualCheck } from "@/lib/api/endpoints";
 import { formatLatencySeries, formatUptimeDays } from "@/lib/api/monitoring";
 import {
   Endpoint,
@@ -41,16 +41,22 @@ export default function EndpointDetailPage() {
   const [latencyData, setLatencyData] = React.useState<LatencyDataPoint[]>([]);
   const [uptimeDays, setUptimeDays] = React.useState<DayUptimeSummary[]>([]);
   const [checks, setChecks] = React.useState<MonitorCheck[]>([]);
+  const [historyPagination, setHistoryPagination] = React.useState({
+    page: 1,
+    limit: 15,
+    total: 0,
+    totalPages: 1,
+  });
+  const [historyPage, setHistoryPage] = React.useState(1);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCheckingNow, setIsCheckingNow] = React.useState(false);
   const [checkResultToast, setCheckResultToast] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [timeRange, setTimeRange] = React.useState<"24h" | "7d" | "30d">("24h");
 
-  const refreshAllData = React.useCallback(async () => {
+  // Load endpoint overview + 90d uptime
+  const loadEndpointOverview = React.useCallback(async () => {
     if (!id) return;
-    setIsLoading(true);
-    setErrorMessage(null);
     try {
       const ep = await getEndpoint(id);
       if (ep) {
@@ -59,46 +65,64 @@ export default function EndpointDetailPage() {
           ...c,
           checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
         }));
-        setChecks(checkLogs);
-        setLatencyData(formatLatencySeries(checkLogs, 24));
         setUptimeDays(formatUptimeDays(checkLogs, 90));
       } else {
         setEndpoint(null);
       }
     } catch (err: unknown) {
-      console.error("[EndpointDetailPage] Fetch error:", err);
+      console.error("[EndpointDetailPage] Overview fetch error:", err);
       const msg = err instanceof Error ? err.message : "Failed to load endpoint details";
       setErrorMessage(msg);
       setEndpoint(null);
-    } finally {
-      setIsLoading(false);
     }
   }, [id]);
 
+  // Load paginated history checks according to timeRange and page
+  const loadHistoryChecks = React.useCallback(
+    async (pageToLoad: number, range: "24h" | "7d" | "30d") => {
+      if (!id) return;
+      try {
+        const historyRes = await getEndpointHistory(id, pageToLoad, 15, range);
+        const checkLogs: MonitorCheck[] = (historyRes.checks || []).map((c) => ({
+          ...c,
+          checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
+        }));
+        setChecks(checkLogs);
+        setHistoryPagination(historyRes.pagination);
+        setLatencyData(formatLatencySeries(checkLogs, 30));
+      } catch (err: unknown) {
+        console.error("[EndpointDetailPage] History fetch error:", err);
+      }
+    },
+    [id]
+  );
+
+  const refreshAllData = React.useCallback(async () => {
+    if (!id) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      await Promise.all([
+        loadEndpointOverview(),
+        loadHistoryChecks(historyPage, timeRange),
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, loadEndpointOverview, loadHistoryChecks, historyPage, timeRange]);
+
+  // Initial load
   React.useEffect(() => {
     if (!id) return;
     let ignore = false;
 
-    async function loadInitial() {
+    async function initialLoad() {
+      setIsLoading(true);
       try {
-        const ep = await getEndpoint(id);
-        if (!ignore && ep) {
-          setEndpoint(ep);
-          const checkLogs: MonitorCheck[] = (ep.checks || []).map((c) => ({
-            ...c,
-            checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
-          }));
-          setChecks(checkLogs);
-          setLatencyData(formatLatencySeries(checkLogs, 24));
-          setUptimeDays(formatUptimeDays(checkLogs, 90));
-        }
-      } catch (err: unknown) {
-        if (!ignore) {
-          console.error("[EndpointDetailPage] Initial load error:", err);
-          const msg = err instanceof Error ? err.message : "Failed to load endpoint details";
-          setErrorMessage(msg);
-          setEndpoint(null);
-        }
+        await Promise.all([
+          loadEndpointOverview(),
+          loadHistoryChecks(1, timeRange),
+        ]);
       } finally {
         if (!ignore) {
           setIsLoading(false);
@@ -106,12 +130,25 @@ export default function EndpointDetailPage() {
       }
     }
 
-    loadInitial();
+    initialLoad();
 
     return () => {
       ignore = true;
     };
-  }, [id]);
+  }, [id, loadEndpointOverview, loadHistoryChecks, timeRange]);
+
+  // Handle time range change: reset to page 1 and fetch
+  const handleTimeRangeChange = (newRange: "24h" | "7d" | "30d") => {
+    setTimeRange(newRange);
+    setHistoryPage(1);
+    loadHistoryChecks(1, newRange);
+  };
+
+  // Handle history page change
+  const handlePageChange = (newPage: number) => {
+    setHistoryPage(newPage);
+    loadHistoryChecks(newPage, timeRange);
+  };
 
   // Handle on-demand manual check trigger
   const handleManualCheck = async () => {
@@ -126,21 +163,14 @@ export default function EndpointDetailPage() {
       // Wait a moment for worker execution, then refresh checks from database
       setTimeout(async () => {
         try {
-          const updated = await getEndpoint(id);
-          if (updated) {
-            setEndpoint(updated);
-            const checkLogs: MonitorCheck[] = (updated.checks || []).map((c) => ({
-              ...c,
-              checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
-            }));
-            setChecks(checkLogs);
-            setLatencyData(formatLatencySeries(checkLogs, 24));
-            setUptimeDays(formatUptimeDays(checkLogs, 90));
-          }
+          await Promise.all([
+            loadEndpointOverview(),
+            loadHistoryChecks(historyPage, timeRange),
+          ]);
         } catch {
           // Silent catch on secondary reload
         }
-      }, 1000);
+      }, 1200);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to trigger manual check";
       alert(msg);
@@ -184,7 +214,7 @@ export default function EndpointDetailPage() {
             `The requested monitor with identifier "${id}" does not exist or you do not have permission to view it.`
           }
           action={
-            <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white">
+            <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white focus-visible:ring-2 focus-visible:ring-indigo-500">
               <Link href="/dashboard/endpoints">Return to Endpoints</Link>
             </Button>
           }
@@ -202,7 +232,8 @@ export default function EndpointDetailPage() {
             asChild
             variant="outline"
             size="icon-xs"
-            className="border-border text-slate-400 hover:text-white mt-1"
+            aria-label="Back to endpoints list"
+            className="border-border text-slate-400 hover:text-white mt-1 focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <Link href="/dashboard/endpoints">
               <ArrowLeft className="size-4" />
@@ -222,7 +253,8 @@ export default function EndpointDetailPage() {
                 href={endpoint.url}
                 target="_blank"
                 rel="noreferrer"
-                className="hover:text-indigo-400 flex items-center gap-1 transition-colors"
+                aria-label={`Open ${endpoint.url} in new tab`}
+                className="hover:text-indigo-400 flex items-center gap-1 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
               >
                 <span>{endpoint.url}</span>
                 <ExternalLink className="size-3" />
@@ -243,8 +275,8 @@ export default function EndpointDetailPage() {
             size="sm"
             onClick={refreshAllData}
             disabled={isLoading}
-            className="border-border text-slate-300 hover:text-white h-9 gap-1.5 text-xs"
-            title="Refresh monitor telemetry"
+            aria-label="Refresh monitor telemetry"
+            className="border-border text-slate-300 hover:text-white h-9 gap-1.5 text-xs focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -256,7 +288,8 @@ export default function EndpointDetailPage() {
             size="sm"
             onClick={handleManualCheck}
             disabled={isCheckingNow}
-            className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 h-9 gap-1.5 text-xs font-medium"
+            aria-label="Test request now"
+            className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 h-9 gap-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <Play className={`size-3.5 ${isCheckingNow ? "animate-spin" : ""}`} />
             <span>{isCheckingNow ? "Dispatching Check..." : "Test Request Now"}</span>
@@ -266,7 +299,8 @@ export default function EndpointDetailPage() {
             asChild
             variant="outline"
             size="sm"
-            className="border-border text-slate-300 hover:text-white h-9 gap-1.5 text-xs"
+            aria-label="Edit monitor configuration"
+            className="border-border text-slate-300 hover:text-white h-9 gap-1.5 text-xs focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <Link href={`/dashboard/endpoints/${endpoint.id}/edit`}>
               <Settings className="size-3.5" />
@@ -278,7 +312,10 @@ export default function EndpointDetailPage() {
 
       {/* Manual Check Result Notification */}
       {checkResultToast && (
-        <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 flex items-center gap-2.5 text-xs font-mono animate-in fade-in duration-200">
+        <div
+          role="status"
+          className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 flex items-center gap-2.5 text-xs font-mono animate-in fade-in duration-200"
+        >
           <Check className="size-4 text-emerald-400 shrink-0" />
           <span>{checkResultToast}</span>
         </div>
@@ -339,12 +376,12 @@ export default function EndpointDetailPage() {
         />
       </div>
 
-      {/* Latency History Chart */}
+      {/* Latency History Chart with P95 & Time Range */}
       <div className="rounded-xl border border-border bg-card p-5">
         <LatencyChart
           data={latencyData}
           timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
+          onTimeRangeChange={handleTimeRangeChange}
         />
       </div>
 
@@ -353,11 +390,15 @@ export default function EndpointDetailPage() {
         <UptimeBar days={uptimeDays} />
       </div>
 
-      {/* Execution Checks Table */}
+      {/* Execution Checks Table with Pagination & Time Range */}
       <ExecutionHistoryTable
         checks={checks}
         onRefresh={refreshAllData}
         isLoading={isLoading}
+        pagination={historyPagination}
+        onPageChange={handlePageChange}
+        timeRange={timeRange}
+        onTimeRangeChange={handleTimeRangeChange}
       />
     </div>
   );

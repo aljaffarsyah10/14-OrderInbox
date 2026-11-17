@@ -13,12 +13,45 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
   title: {
     default: "OrderInbox — Developer-grade API Monitoring & Uptime Alerts",
     template: "%s | OrderInbox",
   },
   description:
     "Zero-latency HTTP/REST API uptime monitoring, payload assertions, and incident alerts for engineering teams.",
+  keywords: [
+    "API monitoring",
+    "uptime monitor",
+    "synthetic monitoring",
+    "REST API test",
+    "health check",
+    "latency telemetry",
+    "incident alert",
+    "devops",
+  ],
+  authors: [{ name: "OrderInbox Engineering Team" }],
+  creator: "OrderInbox",
+  openGraph: {
+    title: "OrderInbox — Developer-grade API Monitoring & Uptime Alerts",
+    description:
+      "Zero-latency HTTP/REST API uptime monitoring, payload assertions, and incident alerts for modern engineering teams.",
+    url: "/",
+    siteName: "OrderInbox",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OrderInbox — Developer-grade API Monitoring & Uptime Alerts",
+    description:
+      "Zero-latency HTTP/REST API uptime monitoring, payload assertions, and incident alerts for modern engineering teams.",
+    creator: "@orderinbox",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

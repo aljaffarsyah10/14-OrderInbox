@@ -31,17 +31,33 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const range = searchParams.get("range")?.toLowerCase();
     const skip = (page - 1) * limit;
+
+    const where: {
+      endpointId: string;
+      checkedAt?: { gte: Date };
+    } = {
+      endpointId: id,
+    };
+
+    if (range === "24h") {
+      where.checkedAt = { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
+    } else if (range === "7d") {
+      where.checkedAt = { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) };
+    } else if (range === "30d") {
+      where.checkedAt = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+    }
 
     const [checks, total] = await Promise.all([
       prisma.monitorCheck.findMany({
-        where: { endpointId: id },
+        where,
         orderBy: { checkedAt: "desc" },
         skip,
         take: limit,
       }),
       prisma.monitorCheck.count({
-        where: { endpointId: id },
+        where,
       }),
     ]);
 
@@ -51,7 +67,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     });
   } catch (error) {

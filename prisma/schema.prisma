@@ -52,6 +52,7 @@ model User {
   accounts      Account[]
   endpoints     Endpoint[]
   alerts        Alert[]
+  settings      UserSettings?
 
   @@map("users")
 }
@@ -174,4 +175,20 @@ model Alert {
   @@index([userId, createdAt(sort: Desc)])
   @@index([endpointId])
   @@map("alerts")
+}
+
+model UserSettings {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alertEmails         String[] @default([])
+  webhookUrl          String?
+  webhookEnabled      Boolean  @default(false)
+  alertOnDown         Boolean  @default(true)
+  alertOnRecovery     Boolean  @default(true)
+  consecutiveFailures Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("user_settings")
 }

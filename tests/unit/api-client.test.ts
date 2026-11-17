@@ -1,10 +1,44 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { formatLatencySeries, formatUptimeDays } from "../../src/lib/api/monitoring";
+import {
+  formatLatencySeries,
+  formatUptimeDays,
+  calculateLatencyStats,
+} from "../../src/lib/api/monitoring";
 import { ApiClientError } from "../../src/lib/api/client";
 import { MonitorCheck } from "../../src/types";
 
 describe("Frontend API & Monitoring Helpers", () => {
+  describe("calculateLatencyStats", () => {
+    it("should return zeros for empty or invalid latency arrays", () => {
+      const statsEmpty = calculateLatencyStats([]);
+      assert.deepStrictEqual(statsEmpty, { min: 0, max: 0, avg: 0, p95: 0 });
+
+      const statsNulls = calculateLatencyStats([null, undefined, NaN]);
+      assert.deepStrictEqual(statsNulls, { min: 0, max: 0, avg: 0, p95: 0 });
+    });
+
+    it("should calculate min, max, avg, and p95 correctly", () => {
+      // 100 values from 1 to 100
+      const latencies = Array.from({ length: 100 }, (_, i) => i + 1);
+      const stats = calculateLatencyStats(latencies);
+
+      assert.strictEqual(stats.min, 1);
+      assert.strictEqual(stats.max, 100);
+      assert.strictEqual(stats.avg, 51); // (1+100)*100/2 / 100 = 50.5 -> 51
+      assert.strictEqual(stats.p95, 95);
+    });
+
+    it("should filter out negative or invalid values", () => {
+      const latencies = [50, 100, 150, -10, null, 200];
+      const stats = calculateLatencyStats(latencies);
+
+      assert.strictEqual(stats.min, 50);
+      assert.strictEqual(stats.max, 200);
+      assert.strictEqual(stats.avg, 125);
+    });
+  });
+
   describe("formatLatencySeries", () => {
     it("should return an empty array when given no checks", () => {
       const result = formatLatencySeries([]);

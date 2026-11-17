@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma, MonitorStatus, HttpMethod } from "@prisma/client";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { apiEndpointInputSchema } from "@/lib/validation/endpoint.schema";
@@ -12,23 +13,55 @@ export async function GET(req: NextRequest) {
       return errorResponse("Unauthorized", "UNAUTHORIZED", 401);
     }
 
-    const endpoints = await prisma.endpoint.findMany({
-      where: {
-        userId: session.user.id,
-      },
-      include: {
-        configuration: true,
-        checks: {
-          orderBy: {
-            checkedAt: "desc",
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get("search")?.trim() || "";
+    const statusParam = searchParams.get("status")?.toUpperCase() || "";
+    const methodParam = searchParams.get("method")?.toUpperCase() || "";
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "10", 10)));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.EndpointWhereInput = {
+      userId: session.user.id,
+    };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { url: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const validStatuses = ["UP", "DOWN", "PAUSED", "PENDING"];
+    if (statusParam && statusParam !== "ALL" && validStatuses.includes(statusParam)) {
+      where.status = statusParam as MonitorStatus;
+    }
+
+    const validMethods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
+    if (methodParam && methodParam !== "ALL" && validMethods.includes(methodParam)) {
+      where.method = methodParam as HttpMethod;
+    }
+
+    const [endpoints, total] = await Promise.all([
+      prisma.endpoint.findMany({
+        where,
+        include: {
+          configuration: true,
+          checks: {
+            orderBy: {
+              checkedAt: "desc",
+            },
+            take: 10,
           },
-          take: 10,
         },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.endpoint.count({ where }),
+    ]);
 
     // Compute presentation fields (currentLatencyMs, 24h uptime)
     const formattedEndpoints = endpoints.map((ep) => {
@@ -46,7 +79,17 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return successResponse(formattedEndpoints);
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    return successResponse({
+      endpoints: formattedEndpoints,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
   } catch (error) {
     console.error("[GET /api/endpoints]", error);
     return errorResponse("Internal server error", "INTERNAL_SERVER_ERROR", 500);

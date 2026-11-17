@@ -129,4 +129,35 @@ describe("Database & Domain Persistence Integration Tests", () => {
     });
     assert.equal(config, null);
   });
+
+  it("should create and update UserSettings with alert configurations", async () => {
+    const settings = await prisma.userSettings.create({
+      data: {
+        userId: testUserId,
+        alertEmails: ["devops@orderinbox.local", "ops@orderinbox.local"],
+        webhookUrl: "https://hooks.slack.com/services/test",
+        webhookEnabled: true,
+        alertOnDown: true,
+        alertOnRecovery: true,
+        consecutiveFailures: 2,
+      },
+    });
+
+    assert.ok(settings.id);
+    assert.equal(settings.userId, testUserId);
+    assert.deepEqual(settings.alertEmails, ["devops@orderinbox.local", "ops@orderinbox.local"]);
+    assert.equal(settings.webhookEnabled, true);
+    assert.equal(settings.consecutiveFailures, 2);
+
+    const updated = await prisma.userSettings.update({
+      where: { userId: testUserId },
+      data: {
+        consecutiveFailures: 3,
+        alertOnRecovery: false,
+      },
+    });
+
+    assert.equal(updated.consecutiveFailures, 3);
+    assert.equal(updated.alertOnRecovery, false);
+  });
 });

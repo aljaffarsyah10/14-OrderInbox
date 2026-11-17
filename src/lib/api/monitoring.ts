@@ -5,6 +5,43 @@
 
 import { MonitorCheck, LatencyDataPoint, DayUptimeSummary } from "@/types";
 
+export interface LatencyStats {
+  min: number;
+  max: number;
+  avg: number;
+  p95: number;
+}
+
+/**
+ * Calculates Min, Max, Average, and 95th Percentile (P95) latency statistics.
+ */
+export function calculateLatencyStats(
+  latencies: (number | null | undefined)[]
+): LatencyStats {
+  const valid = latencies.filter(
+    (v): v is number => typeof v === "number" && !isNaN(v) && v >= 0
+  );
+
+  if (valid.length === 0) {
+    return { min: 0, max: 0, avg: 0, p95: 0 };
+  }
+
+  const sorted = [...valid].sort((a, b) => a - b);
+  const min = Math.round(sorted[0]);
+  const max = Math.round(sorted[sorted.length - 1]);
+  const sum = sorted.reduce((acc, val) => acc + val, 0);
+  const avg = Math.round(sum / sorted.length);
+
+  // 95th Percentile calculation
+  const p95Index = Math.max(
+    0,
+    Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)
+  );
+  const p95 = Math.round(sorted[p95Index]);
+
+  return { min, max, avg, p95 };
+}
+
 /**
  * Transforms raw MonitorCheck records into chronological LatencyDataPoints for charts.
  */

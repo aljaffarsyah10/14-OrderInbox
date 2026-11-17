@@ -124,7 +124,7 @@ export function Header({ onMobileMenuOpen }: HeaderProps) {
           size="sm"
           className="h-7 text-xs border-border/80 text-slate-300 hover:text-white"
         >
-          <Link href="/" target="_blank" title="View landing page">
+          <Link href="/" target="_blank" title="View landing page" aria-label="View public landing page">
             <ExternalLink className="size-3.5" />
           </Link>
         </Button>

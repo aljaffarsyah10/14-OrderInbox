@@ -35,11 +35,54 @@ export interface DeleteEndpointResponse {
   id: string;
 }
 
+export interface EndpointListParams {
+  search?: string;
+  status?: string;
+  method?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface EndpointListResponse {
+  endpoints: Endpoint[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 /**
- * Fetch list of all endpoints belonging to the authenticated user
+ * Fetch list of endpoints belonging to the authenticated user with optional search, filters, and pagination
  */
-export async function getEndpoints(): Promise<Endpoint[]> {
-  return apiClient.get<Endpoint[]>("/api/endpoints");
+export async function getEndpoints(
+  params?: EndpointListParams
+): Promise<EndpointListResponse> {
+  const queryParams: Record<string, string | number> = {};
+  if (params?.search) queryParams.search = params.search;
+  if (params?.status && params.status !== "ALL") queryParams.status = params.status;
+  if (params?.method && params.method !== "ALL") queryParams.method = params.method;
+  if (params?.page) queryParams.page = params.page;
+  if (params?.limit) queryParams.limit = params.limit;
+
+  const res = await apiClient.get<EndpointListResponse | Endpoint[]>("/api/endpoints", {
+    params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+  });
+
+  if (Array.isArray(res)) {
+    return {
+      endpoints: res,
+      pagination: {
+        page: 1,
+        limit: res.length,
+        total: res.length,
+        totalPages: 1,
+      },
+    };
+  }
+
+  return res;
 }
 
 /**
@@ -100,10 +143,15 @@ export async function triggerManualCheck(id: string): Promise<ManualCheckRespons
 export async function getEndpointHistory(
   id: string,
   page = 1,
-  limit = 20
+  limit = 20,
+  range?: "24h" | "7d" | "30d" | "all"
 ): Promise<EndpointHistoryResponse> {
+  const params: Record<string, string | number> = { page, limit };
+  if (range && range !== "all") {
+    params.range = range;
+  }
   return apiClient.get<EndpointHistoryResponse>(
     `/api/endpoints/${encodeURIComponent(id)}/history`,
-    { params: { page, limit } }
+    { params }
   );
 }
