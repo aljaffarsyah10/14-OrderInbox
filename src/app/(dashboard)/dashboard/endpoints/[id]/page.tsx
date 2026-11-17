@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Check,
   ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -23,8 +24,8 @@ import { UptimeBar } from "@/components/endpoints/uptime-bar";
 import { ExecutionHistoryTable } from "@/components/endpoints/execution-history-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { endpointMockService } from "@/features/endpoints/mocks/endpoint-mock-service";
-import { monitoringMockService } from "@/features/monitoring/mocks/monitoring-mock-service";
+import { getEndpoint, triggerManualCheck } from "@/lib/api/endpoints";
+import { formatLatencySeries, formatUptimeDays } from "@/lib/api/monitoring";
 import {
   Endpoint,
   LatencyDataPoint,
@@ -43,26 +44,32 @@ export default function EndpointDetailPage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCheckingNow, setIsCheckingNow] = React.useState(false);
   const [checkResultToast, setCheckResultToast] = React.useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [timeRange, setTimeRange] = React.useState<"24h" | "7d" | "30d">("24h");
 
   const refreshAllData = React.useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
+    setErrorMessage(null);
     try {
-      const ep = await endpointMockService.getById(id);
+      const ep = await getEndpoint(id);
       if (ep) {
         setEndpoint(ep);
-        const [latency, uptime, checkLogs] = await Promise.all([
-          monitoringMockService.getEndpointLatencySeries(id, ep.currentLatencyMs || 140),
-          monitoringMockService.getEndpoint90DayUptime(id),
-          monitoringMockService.getEndpointChecks(id, 15),
-        ]);
-        setLatencyData(latency);
-        setUptimeDays(uptime);
+        const checkLogs: MonitorCheck[] = (ep.checks || []).map((c) => ({
+          ...c,
+          checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
+        }));
         setChecks(checkLogs);
+        setLatencyData(formatLatencySeries(checkLogs, 24));
+        setUptimeDays(formatUptimeDays(checkLogs, 90));
       } else {
         setEndpoint(null);
       }
+    } catch (err: unknown) {
+      console.error("[EndpointDetailPage] Fetch error:", err);
+      const msg = err instanceof Error ? err.message : "Failed to load endpoint details";
+      setErrorMessage(msg);
+      setEndpoint(null);
     } finally {
       setIsLoading(false);
     }
@@ -70,33 +77,39 @@ export default function EndpointDetailPage() {
 
   React.useEffect(() => {
     if (!id) return;
-    let isMounted = true;
+    let ignore = false;
 
-    endpointMockService.getById(id).then(async (ep) => {
-      if (!isMounted) return;
-      if (ep) {
-        const [latency, uptime, checkLogs] = await Promise.all([
-          monitoringMockService.getEndpointLatencySeries(id, ep.currentLatencyMs || 140),
-          monitoringMockService.getEndpoint90DayUptime(id),
-          monitoringMockService.getEndpointChecks(id, 15),
-        ]);
-        if (isMounted) {
+    async function loadInitial() {
+      try {
+        const ep = await getEndpoint(id);
+        if (!ignore && ep) {
           setEndpoint(ep);
-          setLatencyData(latency);
-          setUptimeDays(uptime);
+          const checkLogs: MonitorCheck[] = (ep.checks || []).map((c) => ({
+            ...c,
+            checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
+          }));
           setChecks(checkLogs);
-          setIsLoading(false);
+          setLatencyData(formatLatencySeries(checkLogs, 24));
+          setUptimeDays(formatUptimeDays(checkLogs, 90));
         }
-      } else {
-        if (isMounted) {
+      } catch (err: unknown) {
+        if (!ignore) {
+          console.error("[EndpointDetailPage] Initial load error:", err);
+          const msg = err instanceof Error ? err.message : "Failed to load endpoint details";
+          setErrorMessage(msg);
           setEndpoint(null);
+        }
+      } finally {
+        if (!ignore) {
           setIsLoading(false);
         }
       }
-    });
+    }
+
+    loadInitial();
 
     return () => {
-      isMounted = false;
+      ignore = true;
     };
   }, [id]);
 
@@ -107,26 +120,39 @@ export default function EndpointDetailPage() {
     setCheckResultToast(null);
 
     try {
-      const res = await endpointMockService.triggerManualCheck(id);
-      setCheckResultToast(
-        `Instant check finished: HTTP ${res.httpStatus} • ${res.latencyMs}ms • Status ${res.status}`
-      );
-      // Reload updated check logs and latency
-      const [ep, updatedChecks] = await Promise.all([
-        endpointMockService.getById(id),
-        monitoringMockService.getEndpointChecks(id, 15),
-      ]);
-      if (ep) setEndpoint(ep);
-      setChecks(updatedChecks);
+      const res = await triggerManualCheck(id);
+      setCheckResultToast(res.message || "Manual check dispatched to monitoring queue.");
+
+      // Wait a moment for worker execution, then refresh checks from database
+      setTimeout(async () => {
+        try {
+          const updated = await getEndpoint(id);
+          if (updated) {
+            setEndpoint(updated);
+            const checkLogs: MonitorCheck[] = (updated.checks || []).map((c) => ({
+              ...c,
+              checkedAt: typeof c.checkedAt === "string" ? c.checkedAt : new Date(c.checkedAt).toISOString(),
+            }));
+            setChecks(checkLogs);
+            setLatencyData(formatLatencySeries(checkLogs, 24));
+            setUptimeDays(formatUptimeDays(checkLogs, 90));
+          }
+        } catch {
+          // Silent catch on secondary reload
+        }
+      }, 1000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to trigger manual check";
+      alert(msg);
     } finally {
       setIsCheckingNow(false);
       setTimeout(() => {
         setCheckResultToast(null);
-      }, 5000);
+      }, 6000);
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !endpoint) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -153,7 +179,10 @@ export default function EndpointDetailPage() {
       <div className="py-12">
         <EmptyState
           title="Endpoint Not Found"
-          description={`The requested monitor with identifier "${id}" does not exist in the mock telemetry catalog.`}
+          description={
+            errorMessage ||
+            `The requested monitor with identifier "${id}" does not exist or you do not have permission to view it.`
+          }
           action={
             <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white">
               <Link href="/dashboard/endpoints">Return to Endpoints</Link>
@@ -212,12 +241,25 @@ export default function EndpointDetailPage() {
             type="button"
             variant="outline"
             size="sm"
+            onClick={refreshAllData}
+            disabled={isLoading}
+            className="border-border text-slate-300 hover:text-white h-9 gap-1.5 text-xs"
+            title="Refresh monitor telemetry"
+          >
+            <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={handleManualCheck}
             disabled={isCheckingNow}
             className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 h-9 gap-1.5 text-xs font-medium"
           >
             <Play className={`size-3.5 ${isCheckingNow ? "animate-spin" : ""}`} />
-            <span>{isCheckingNow ? "Executing Check..." : "Test Now"}</span>
+            <span>{isCheckingNow ? "Dispatching Check..." : "Test Request Now"}</span>
           </Button>
 
           <Button
@@ -246,7 +288,11 @@ export default function EndpointDetailPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="Current Latency"
-          value={endpoint.currentLatencyMs ? `${endpoint.currentLatencyMs}ms` : "--"}
+          value={
+            endpoint.currentLatencyMs !== null && endpoint.currentLatencyMs !== undefined
+              ? `${Math.round(endpoint.currentLatencyMs)}ms`
+              : "--"
+          }
           subValue={
             (endpoint.currentLatencyMs || 0) < 200
               ? "Fast (<200ms)"
@@ -262,9 +308,16 @@ export default function EndpointDetailPage() {
         />
         <MetricCard
           label="24h Uptime"
-          value={endpoint.uptime24h ? `${endpoint.uptime24h.toFixed(2)}%` : "--"}
+          value={
+            endpoint.uptime24h !== null && endpoint.uptime24h !== undefined
+              ? `${endpoint.uptime24h.toFixed(1)}%`
+              : "100%"
+          }
           subValue="Target SLA: 99.9%"
-          trend={{ value: "Operational", isPositive: true }}
+          trend={{
+            value: (endpoint.uptime24h ?? 100) >= 99 ? "Operational" : "Degraded",
+            isPositive: (endpoint.uptime24h ?? 100) >= 99,
+          }}
           icon={CheckCircle2}
         />
         <MetricCard

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { EndpointForm } from "@/components/endpoints/endpoint-form";
-import { endpointMockService } from "@/features/endpoints/mocks/endpoint-mock-service";
+import { getEndpoint, updateEndpoint, deleteEndpoint, togglePauseEndpoint } from "@/lib/api/endpoints";
 import { Endpoint } from "@/types";
 import { EndpointFormValues } from "@/lib/validation/endpoint.schema";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,10 +20,14 @@ export default function EditEndpointPage() {
   const [isLoading, setIsLoading] = React.useState(true);
 
   const refreshEndpoint = React.useCallback(async () => {
+    if (!id) return;
     setIsLoading(true);
     try {
-      const data = await endpointMockService.getById(id);
+      const data = await getEndpoint(id);
       setEndpoint(data);
+    } catch (err) {
+      console.error("[EditEndpointPage] Fetch error:", err);
+      setEndpoint(null);
     } finally {
       setIsLoading(false);
     }
@@ -31,17 +35,30 @@ export default function EditEndpointPage() {
 
   React.useEffect(() => {
     if (!id) return;
-    let isMounted = true;
+    let ignore = false;
 
-    endpointMockService.getById(id).then((data) => {
-      if (isMounted) {
-        setEndpoint(data);
-        setIsLoading(false);
+    async function loadInitial() {
+      try {
+        const data = await getEndpoint(id);
+        if (!ignore) {
+          setEndpoint(data);
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error("[EditEndpointPage] Initial load error:", err);
+          setEndpoint(null);
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
       }
-    });
+    }
+
+    loadInitial();
 
     return () => {
-      isMounted = false;
+      ignore = true;
     };
   }, [id]);
 
@@ -61,15 +78,16 @@ export default function EditEndpointPage() {
         }
       }
 
-      const updated = await endpointMockService.update(id, {
-        name: values.name,
-        url: values.url,
+      const updated = await updateEndpoint(id, {
+        name: values.name.trim(),
+        url: values.url.trim(),
         method: values.method,
         intervalSeconds: values.intervalSeconds,
         timeoutMs: values.timeoutMs,
         expectedStatus: expectedStatusArray,
         headers: headerMap,
-        body: values.body,
+        body: values.body ? values.body : undefined,
+        headerRules: values.headerRules,
         bodyRules: values.bodyRules,
       });
 
@@ -86,16 +104,27 @@ export default function EditEndpointPage() {
 
   const handleDelete = async () => {
     if (confirm("Are you sure you want to permanently delete this monitor and all history?")) {
-      await endpointMockService.delete(id);
-      router.push("/dashboard/endpoints");
-      return true;
+      try {
+        await deleteEndpoint(id);
+        router.push("/dashboard/endpoints");
+        return true;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to delete monitor";
+        alert(msg);
+        return false;
+      }
     }
     return false;
   };
 
   const handleTogglePause = async () => {
-    await endpointMockService.togglePause(id);
-    await refreshEndpoint();
+    try {
+      await togglePauseEndpoint(id);
+      await refreshEndpoint();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to toggle pause status";
+      alert(msg);
+    }
   };
 
   if (isLoading) {
@@ -132,7 +161,7 @@ export default function EditEndpointPage() {
             Edit Monitor: {endpoint.name}
           </h1>
           <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
-            Settings
+            Live Configuration
           </span>
         </div>
         <p className="text-sm text-slate-400 mt-1">

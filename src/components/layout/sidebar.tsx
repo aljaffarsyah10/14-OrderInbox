@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   LayoutDashboard,
@@ -12,9 +12,11 @@ import {
   LogOut,
   User,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
+import { useSession, signOutUser } from "@/lib/api/auth";
 
 interface NavItem {
   name: string;
@@ -51,6 +53,9 @@ interface SidebarProps {
 
 export function Sidebar({ onNavClick, className }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { data: session, isPending } = useSession();
+  const [isSigningOut, setIsSigningOut] = React.useState(false);
 
   const isItemActive = (item: NavItem) => {
     if (item.exact) {
@@ -58,6 +63,23 @@ export function Sidebar({ onNavClick, className }: SidebarProps) {
     }
     return pathname.startsWith(item.href);
   };
+
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true);
+      await signOutUser();
+      router.push("/login");
+      router.refresh();
+    } catch (err) {
+      console.error("[Sidebar] SignOut error:", err);
+      router.push("/login");
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const userName = session?.user?.name || "Workspace Member";
+  const userEmail = session?.user?.email || "active-session@orderinbox.dev";
 
   return (
     <aside
@@ -157,23 +179,28 @@ export function Sidebar({ onNavClick, className }: SidebarProps) {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-medium text-slate-200 truncate">
-                Alex Mercer
+                {isPending ? "Loading..." : userName}
               </span>
               <span className="text-[10px] text-muted-foreground truncate font-mono">
-                dev@orderinbox.dev
+                {isPending ? "..." : userEmail}
               </span>
             </div>
           </div>
           <Button
-            asChild
+            type="button"
             variant="ghost"
             size="icon-xs"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
             className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 shrink-0"
             title="Sign out"
+            aria-label="Sign out"
           >
-            <Link href="/login">
+            {isSigningOut ? (
+              <Loader2 className="size-3.5 animate-spin text-rose-400" />
+            ) : (
               <LogOut className="size-3.5" />
-            </Link>
+            )}
           </Button>
         </div>
       </div>

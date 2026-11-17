@@ -1,19 +1,42 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Radio, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Radio, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { signUpWithEmail } from "@/lib/api/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = React.useState("Alex Mercer");
+  const [email, setEmail] = React.useState("alex@engineering.io");
+  const [password, setPassword] = React.useState("supersecret123");
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const handleMockSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Static mockup navigation without backend auth logic
-    router.push("/dashboard");
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      await signUpWithEmail({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      });
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create account. Please try again.";
+      setErrorMessage(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -40,7 +63,14 @@ export default function RegisterPage() {
 
         {/* Register Card */}
         <Card className="p-6 md:p-8 bg-[#111827] border border-border/80 shadow-2xl">
-          <form onSubmit={handleMockSubmit} className="space-y-4">
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+              <AlertCircle className="size-4 text-rose-400 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label
                 htmlFor="name"
@@ -52,8 +82,10 @@ export default function RegisterPage() {
                 id="name"
                 type="text"
                 placeholder="Alex Mercer"
-                defaultValue="Alex Mercer"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 required
+                disabled={isLoading}
                 className="bg-[#0b1120] border-slate-700 text-slate-100 h-10 focus-visible:ring-indigo-500"
               />
             </div>
@@ -69,8 +101,10 @@ export default function RegisterPage() {
                 id="email"
                 type="email"
                 placeholder="alex@engineering.io"
-                defaultValue="alex@engineering.io"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
                 className="bg-[#0b1120] border-slate-700 text-slate-100 h-10 focus-visible:ring-indigo-500"
               />
             </div>
@@ -86,17 +120,19 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 placeholder="••••••••••••"
-                defaultValue="supersecret123"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
                 className="bg-[#0b1120] border-slate-700 text-slate-100 h-10 focus-visible:ring-indigo-500"
               />
               <div className="flex items-center gap-1.5 mt-2">
                 <div className="h-1 flex-1 rounded bg-emerald-500" />
                 <div className="h-1 flex-1 rounded bg-emerald-500" />
                 <div className="h-1 flex-1 rounded bg-emerald-500" />
-                <div className="h-1 flex-1 rounded bg-slate-700" />
+                <div className="h-1 flex-1 rounded bg-emerald-500" />
                 <span className="text-[11px] font-mono text-emerald-400 pl-1">
-                  Strong
+                  Ready
                 </span>
               </div>
             </div>
@@ -114,10 +150,20 @@ export default function RegisterPage() {
 
             <Button
               type="submit"
+              disabled={isLoading}
               className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-10 mt-3 shadow-sm"
             >
-              Create Account & Launch Dashboard
-              <ArrowRight className="size-4 ml-1.5" />
+              {isLoading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  Create Account & Launch Dashboard
+                  <ArrowRight className="size-4 ml-1.5" />
+                </>
+              )}
             </Button>
           </form>
 

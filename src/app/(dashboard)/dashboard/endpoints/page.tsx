@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,54 +38,94 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { endpointMockService } from "@/features/endpoints/mocks/endpoint-mock-service";
-import { Endpoint } from "@/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getEndpoints, togglePauseEndpoint, deleteEndpoint } from "@/lib/api/endpoints";
+import { Endpoint } from "@/types";
 
 export default function EndpointsListPage() {
   const router = useRouter();
   const [endpoints, setEndpoints] = React.useState<Endpoint[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [actionMessage, setActionMessage] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [selectedStatus, setSelectedStatus] = React.useState<string>("ALL");
   const [selectedMethod, setSelectedMethod] = React.useState<string>("ALL");
   const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 8;
 
   const refreshEndpoints = React.useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const data = await endpointMockService.getAll();
+      const data = await getEndpoints();
       setEndpoints(data);
+    } catch (err: unknown) {
+      console.error("[EndpointsListPage] Fetch failed:", err);
+      const msg = err instanceof Error ? err.message : "Failed to load endpoints";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    let isMounted = true;
-    endpointMockService.getAll().then((data) => {
-      if (isMounted) {
-        setEndpoints(data);
-        setIsLoading(false);
+    let ignore = false;
+
+    async function loadInitial() {
+      try {
+        const data = await getEndpoints();
+        if (!ignore) {
+          setEndpoints(data);
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          console.error("[EndpointsListPage] Fetch failed:", err);
+          const msg = err instanceof Error ? err.message : "Failed to load endpoints";
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
       }
-    });
+    }
+
+    loadInitial();
 
     return () => {
-      isMounted = false;
+      ignore = true;
     };
   }, []);
 
   // Actions
   const handleTogglePause = async (id: string) => {
-    await endpointMockService.togglePause(id);
-    await refreshEndpoints();
+    try {
+      const updated = await togglePauseEndpoint(id);
+      setActionMessage(
+        updated.isActive
+          ? `Monitor resumed: ${updated.name}`
+          : `Monitor paused: ${updated.name}`
+      );
+      setTimeout(() => setActionMessage(null), 4000);
+      await refreshEndpoints();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update pause status";
+      alert(msg);
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this monitor?")) {
-      await endpointMockService.delete(id);
-      await refreshEndpoints();
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to permanently delete monitor "${name}" and all check history?`)) {
+      try {
+        await deleteEndpoint(id);
+        setActionMessage(`Monitor "${name}" successfully deleted.`);
+        setTimeout(() => setActionMessage(null), 4000);
+        await refreshEndpoints();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to delete monitor";
+        alert(msg);
+      }
     }
   };
 
@@ -126,16 +168,62 @@ export default function EndpointsListPage() {
           </p>
         </div>
 
-        <Button
-          asChild
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9"
-        >
-          <Link href="/dashboard/endpoints/new">
-            <Plus className="size-4" />
-            <span>Create Endpoint</span>
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={refreshEndpoints}
+            disabled={isLoading}
+            className="h-9 gap-1.5 text-xs text-slate-300 hover:text-white"
+          >
+            <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+
+          <Button
+            asChild
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9"
+          >
+            <Link href="/dashboard/endpoints/new">
+              <Plus className="size-4" />
+              <span>Create Endpoint</span>
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      {/* Action Feedback Banner */}
+      {actionMessage && (
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center justify-between">
+          <span>{actionMessage}</span>
+          <button
+            type="button"
+            onClick={() => setActionMessage(null)}
+            className="text-emerald-400 hover:text-white text-xs"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="size-4 text-rose-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={refreshEndpoints}
+            className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20"
+          >
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col md:flex-row items-center gap-3 p-3 rounded-xl border border-border bg-card">
@@ -295,7 +383,7 @@ export default function EndpointsListPage() {
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums">
                       {ep.currentLatencyMs !== null && ep.currentLatencyMs !== undefined ? (
-                        <span className="text-slate-300">{ep.currentLatencyMs}ms</span>
+                        <span className="text-slate-300">{Math.round(ep.currentLatencyMs)}ms</span>
                       ) : (
                         <span className="text-muted-foreground">&mdash;</span>
                       )}
@@ -309,7 +397,7 @@ export default function EndpointsListPage() {
                               : "text-rose-400 font-medium"
                           }
                         >
-                          {ep.uptime24h.toFixed(2)}%
+                          {ep.uptime24h.toFixed(1)}%
                         </span>
                       ) : (
                         <span className="text-muted-foreground">&mdash;</span>
@@ -371,7 +459,7 @@ export default function EndpointsListPage() {
                             <DropdownMenuSeparator />
 
                             <DropdownMenuItem
-                              onClick={() => handleDelete(ep.id)}
+                              onClick={() => handleDelete(ep.id, ep.name)}
                               className="flex items-center gap-2 text-rose-400 hover:text-rose-300 cursor-pointer"
                             >
                               <Trash2 className="size-3.5" />

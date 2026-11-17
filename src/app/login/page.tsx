@@ -3,10 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Radio, ArrowRight } from "lucide-react";
+import { Radio, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { signInWithEmail } from "@/lib/api/auth";
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -29,11 +30,32 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = React.useState("alex@engineering.io");
+  const [password, setPassword] = React.useState("password123");
+  const [rememberMe, setRememberMe] = React.useState(true);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const handleMockSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Static mockup navigation without backend auth logic
-    router.push("/dashboard");
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      await signInWithEmail({
+        email: email.trim(),
+        password,
+        rememberMe,
+      });
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to sign in. Please verify your credentials.";
+      setErrorMessage(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -60,7 +82,14 @@ export default function LoginPage() {
 
         {/* Login Card */}
         <Card className="p-6 md:p-8 bg-[#111827] border border-border/80 shadow-2xl">
-          <form onSubmit={handleMockSubmit} className="space-y-4">
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+              <AlertCircle className="size-4 text-rose-400 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label
                 htmlFor="email"
@@ -72,8 +101,10 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 placeholder="alex@engineering.io"
-                defaultValue="alex@engineering.io"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
                 className="bg-[#0b1120] border-slate-700 text-slate-100 h-10 focus-visible:ring-indigo-500"
               />
             </div>
@@ -90,7 +121,7 @@ export default function LoginPage() {
                   href="#forgot"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert("Password reset functionality will be enabled in Phase 6.");
+                    alert("Password reset is managed through your workspace administrator.");
                   }}
                   className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                 >
@@ -101,8 +132,10 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 placeholder="••••••••••••"
-                defaultValue="password123"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
                 className="bg-[#0b1120] border-slate-700 text-slate-100 h-10 focus-visible:ring-indigo-500"
               />
             </div>
@@ -111,7 +144,9 @@ export default function LoginPage() {
               <input
                 type="checkbox"
                 id="remember"
-                defaultChecked
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                disabled={isLoading}
                 className="size-4 rounded border-slate-700 bg-[#0b1120] text-indigo-600 focus:ring-indigo-500"
               />
               <label htmlFor="remember" className="text-xs text-slate-400 select-none">
@@ -121,10 +156,20 @@ export default function LoginPage() {
 
             <Button
               type="submit"
+              disabled={isLoading}
               className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-10 mt-2 shadow-sm"
             >
-              Sign In with Email
-              <ArrowRight className="size-4 ml-1.5" />
+              {isLoading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Authenticating...
+                </>
+              ) : (
+                <>
+                  Sign In with Email
+                  <ArrowRight className="size-4 ml-1.5" />
+                </>
+              )}
             </Button>
           </form>
 
@@ -142,7 +187,11 @@ export default function LoginPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/dashboard")}
+            disabled={isLoading}
+            onClick={() => {
+              // Inform user about social login status
+              alert("GitHub OAuth is configured via workspace environment variables.");
+            }}
             className="w-full border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-200 h-10 font-medium gap-2"
           >
             <GithubIcon className="size-4" />

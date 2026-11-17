@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { EndpointForm } from "@/components/endpoints/endpoint-form";
-import { endpointMockService } from "@/features/endpoints/mocks/endpoint-mock-service";
+import { createEndpoint } from "@/lib/api/endpoints";
 import { EndpointFormValues } from "@/lib/validation/endpoint.schema";
 
 export default function CreateEndpointPage() {
@@ -24,16 +24,17 @@ export default function CreateEndpointPage() {
         }
       }
 
-      const created = await endpointMockService.create({
-        name: values.name,
-        url: values.url,
+      const created = await createEndpoint({
+        name: values.name.trim(),
+        url: values.url.trim(),
         method: values.method,
         intervalSeconds: values.intervalSeconds,
         timeoutMs: values.timeoutMs,
         expectedStatus: expectedStatusArray,
-        headers: headerMap,
-        body: values.body,
-        bodyRules: values.bodyRules,
+        headers: Object.keys(headerMap).length > 0 ? headerMap : undefined,
+        body: values.body ? values.body : undefined,
+        headerRules: values.headerRules && values.headerRules.length > 0 ? values.headerRules : undefined,
+        bodyRules: values.bodyRules && values.bodyRules.length > 0 ? values.bodyRules : undefined,
       });
 
       return { success: true, id: created.id };
@@ -50,8 +51,8 @@ export default function CreateEndpointPage() {
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Create New Monitor
           </h1>
-          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
-            Form Validation
+          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+            Live Queue Dispatch
           </span>
         </div>
         <p className="text-sm text-slate-400 mt-1">
