@@ -256,45 +256,48 @@ export default function SettingsPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-border" role="tablist">
+      <div className="flex border-b border-border/80 gap-1.5" role="tablist">
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "alerts"}
           onClick={() => setActiveTab("alerts")}
-          className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-t ${
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all duration-150 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-indigo-500 ${
             activeTab === "alerts"
-              ? "border-indigo-500 text-indigo-400"
-              : "border-transparent text-slate-400 hover:text-white"
+              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg shadow-xs"
+              : "border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg"
           }`}
         >
-          Alert Channels
+          <Bell className="size-3.5" />
+          <span>Alert Channels</span>
         </button>
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "profile"}
           onClick={() => setActiveTab("profile")}
-          className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-t ${
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all duration-150 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-indigo-500 ${
             activeTab === "profile"
-              ? "border-indigo-500 text-indigo-400"
-              : "border-transparent text-slate-400 hover:text-white"
+              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg shadow-xs"
+              : "border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg"
           }`}
         >
-          General Profile
+          <UserIcon className="size-3.5" />
+          <span>General Profile</span>
         </button>
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "security"}
           onClick={() => setActiveTab("security")}
-          className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-t ${
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all duration-150 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-indigo-500 ${
             activeTab === "security"
-              ? "border-indigo-500 text-indigo-400"
-              : "border-transparent text-slate-400 hover:text-white"
+              ? "border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-lg shadow-xs"
+              : "border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg"
           }`}
         >
-          Security &amp; Password
+          <Key className="size-3.5" />
+          <span>Security &amp; Password</span>
         </button>
       </div>
 
@@ -302,7 +305,7 @@ export default function SettingsPage() {
       {activeTab === "alerts" && (
         <div className="space-y-6">
           {/* Email Notification Channels */}
-          <Card className="p-6 bg-card border border-border space-y-4">
+          <Card className="p-6 bg-card/90 backdrop-blur-xs border border-border/80 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-border/70">
               <div className="flex items-center gap-2">
                 <Mail className="size-4 text-indigo-400" />
@@ -394,7 +397,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Webhook Alert Dispatch */}
-          <Card className="p-6 bg-card border border-border space-y-4">
+          <Card className="p-6 bg-card/90 backdrop-blur-xs border border-border/80 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-border/70">
               <div className="flex items-center gap-2">
                 <Webhook className="size-4 text-indigo-400" />
@@ -453,7 +456,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Notification Threshold Rules */}
-          <Card className="p-6 bg-card border border-border space-y-4">
+          <Card className="p-6 bg-card/90 backdrop-blur-xs border border-border/80 shadow-sm space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-border/70">
               <Bell className="size-4 text-indigo-400" />
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
@@ -526,7 +529,7 @@ export default function SettingsPage() {
 
       {/* Tab: General Profile */}
       {activeTab === "profile" && (
-        <Card className="p-6 bg-card border border-border space-y-5">
+        <Card className="p-6 bg-card/90 backdrop-blur-xs border border-border/80 shadow-sm space-y-5">
           <div className="flex items-center gap-2 pb-2 border-b border-border/70">
             <UserIcon className="size-4 text-indigo-400" />
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
@@ -585,7 +588,7 @@ export default function SettingsPage() {
       {activeTab === "security" && (
         <div className="space-y-6">
           {/* Password Change Form */}
-          <Card className="p-6 bg-card border border-border space-y-4">
+          <Card className="p-6 bg-card/90 backdrop-blur-xs border border-border/80 shadow-sm space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-border/70">
               <Key className="size-4 text-indigo-400" />
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
@@ -678,7 +681,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* API Keys Section */}
-          <Card className="p-6 bg-card border border-border space-y-4">
+          <Card className="p-6 bg-card/90 backdrop-blur-xs border border-border/80 shadow-sm space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-border/70">
               <Shield className="size-4 text-indigo-400" />
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300">

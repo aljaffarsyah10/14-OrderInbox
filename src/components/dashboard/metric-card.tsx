@@ -27,17 +27,17 @@ export function MetricCard({
   return (
     <Card
       className={cn(
-        "p-5 bg-card border border-border/80 hover:border-slate-700 transition-colors shadow-none",
+        "p-5 bg-card/90 backdrop-blur-xs border border-border/80 hover:border-slate-600/80 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-950/20 shadow-sm relative overflow-hidden group",
         className
       )}
       {...props}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">
           {label}
         </span>
         {Icon && (
-          <div className="flex size-7 items-center justify-center rounded-md bg-secondary/80 text-muted-foreground">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500/15 group-hover:scale-105 transition-all">
             <Icon className="size-4" />
           </div>
         )}
@@ -50,23 +50,23 @@ export function MetricCard({
       </div>
 
       {(trend || subValue) && (
-        <div className="mt-2.5 flex items-center gap-2 text-xs">
+        <div className="mt-2.5 flex items-center gap-2 text-xs flex-wrap">
           {trend && (
             <span
               className={cn(
-                "inline-flex items-center gap-0.5 font-medium font-mono",
+                "inline-flex items-center gap-1 font-semibold font-mono text-[11px] px-1.5 py-0.5 rounded border",
                 trend.isNeutral
-                  ? "text-muted-foreground"
+                  ? "text-muted-foreground bg-slate-800/40 border-slate-700/60"
                   : trend.isPositive
-                  ? "text-emerald-400"
-                  : "text-rose-400"
+                  ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
+                  : "text-rose-400 bg-rose-500/10 border-rose-500/25"
               )}
             >
               {trend.value}
             </span>
           )}
           {subValue && (
-            <span className="text-muted-foreground truncate">{subValue}</span>
+            <span className="text-muted-foreground truncate text-xs">{subValue}</span>
           )}
         </div>
       )}

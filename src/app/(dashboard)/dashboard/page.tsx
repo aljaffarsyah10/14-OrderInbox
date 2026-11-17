@@ -100,11 +100,11 @@ export default function DashboardOverviewPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight text-white">
               Dashboard Overview
             </h1>
-            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+            <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-semibold">
               Live Telemetry
             </span>
           </div>
@@ -120,7 +120,7 @@ export default function DashboardOverviewPage() {
             size="sm"
             onClick={fetchData}
             disabled={isLoading}
-            className="h-9 gap-1.5 text-xs text-slate-300 hover:text-white"
+            className="h-9 gap-1.5 text-xs text-slate-300 hover:text-white border-border/80 focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -128,7 +128,7 @@ export default function DashboardOverviewPage() {
 
           <Button
             asChild
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium gap-1.5 h-9 shadow-md shadow-indigo-950/30 focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <Link href="/dashboard/endpoints/new">
               <Plus className="size-4" />
@@ -140,7 +140,7 @@ export default function DashboardOverviewPage() {
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2.5">
             <AlertCircle className="size-4 text-rose-400 shrink-0" />
             <span>{error}</span>
@@ -160,10 +160,10 @@ export default function DashboardOverviewPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {isLoading && !summary ? (
           <>
-            <Skeleton className="h-28 rounded-xl" />
-            <Skeleton className="h-28 rounded-xl" />
-            <Skeleton className="h-28 rounded-xl" />
-            <Skeleton className="h-28 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
           </>
         ) : (
           <>
@@ -179,7 +179,7 @@ export default function DashboardOverviewPage() {
             />
             <MetricCard
               label="24h Avg. Uptime"
-              value={summary ? `${summary.avgUptime24h}%` : "100%"}
+              value={summary ? `${summary.avgUptime24h}%` : "100.0%"}
               subValue="Target SLA: 99.9%"
               trend={{
                 value: (summary?.avgUptime24h ?? 100) >= 99.9 ? "Meeting SLA" : "SLA Degraded",
@@ -216,11 +216,11 @@ export default function DashboardOverviewPage() {
         <IncidentFeed incidents={incidents} />
       </div>
 
-      {/* Recent Monitored Endpoints Table */}
-      <div className="rounded-xl border border-border bg-card p-4 sm:p-6 space-y-4">
+      {/* Recent Monitored Endpoints Table / Card List */}
+      <div className="rounded-xl border border-border/80 bg-card/90 backdrop-blur-xs p-4 sm:p-6 space-y-4 shadow-sm">
         <div className="flex items-center justify-between border-b border-border/80 pb-4">
           <div>
-            <h2 className="text-base font-semibold text-white">Monitored Endpoints</h2>
+            <h2 className="text-base font-semibold text-white tracking-tight">Monitored Endpoints</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               Live status and latency measurements for your active targets
             </p>
@@ -229,7 +229,7 @@ export default function DashboardOverviewPage() {
             asChild
             variant="ghost"
             size="sm"
-            className="text-xs text-indigo-400 hover:text-indigo-300 gap-1.5"
+            className="text-xs text-indigo-400 hover:text-indigo-300 gap-1.5 focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <Link href="/dashboard/endpoints">
               <span>View All ({endpoints.length})</span>
@@ -261,81 +261,148 @@ export default function DashboardOverviewPage() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border/70 hover:bg-transparent">
-                  <TableHead className="text-xs uppercase font-medium text-slate-400">Endpoint</TableHead>
-                  <TableHead className="text-xs uppercase font-medium text-slate-400">Method</TableHead>
-                  <TableHead className="text-xs uppercase font-medium text-slate-400">Status</TableHead>
-                  <TableHead className="text-xs uppercase font-medium text-slate-400">Latency</TableHead>
-                  <TableHead className="text-xs uppercase font-medium text-slate-400">24h Uptime</TableHead>
-                  <TableHead className="text-xs uppercase font-medium text-slate-400 text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentEndpoints.map((ep) => (
-                  <TableRow
-                    key={ep.id}
-                    className="border-border/50 hover:bg-slate-800/40 transition-colors"
-                  >
-                    <TableCell className="font-medium text-slate-100 max-w-[240px]">
-                      <div className="flex flex-col min-w-0">
-                        <Link
-                          href={`/dashboard/endpoints/${ep.id}`}
-                          className="hover:text-indigo-400 truncate transition-colors text-sm font-semibold"
-                        >
-                          {ep.name}
-                        </Link>
-                        <span className="text-xs text-muted-foreground truncate font-mono mt-0.5">
-                          {ep.url}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <MethodBadge method={ep.method} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={ep.status} />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {ep.currentLatencyMs !== null && ep.currentLatencyMs !== undefined ? (
-                        <span
-                          className={
-                            ep.currentLatencyMs < 200
-                              ? "text-emerald-400"
-                              : ep.currentLatencyMs < 500
-                              ? "text-amber-400"
-                              : "text-rose-400"
-                          }
-                        >
-                          {Math.round(ep.currentLatencyMs)}ms
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">--</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-300">
-                      {ep.uptime24h !== undefined ? `${ep.uptime24h}%` : "100%"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        asChild
-                        variant="ghost"
-                        size="icon-xs"
-                        className="text-slate-400 hover:text-white"
-                        title="View details"
-                      >
-                        <Link href={`/dashboard/endpoints/${ep.id}`}>
-                          <ExternalLink className="size-3.5" />
-                        </Link>
-                      </Button>
-                    </TableCell>
+          <>
+            {/* Desktop Table (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border/70 hover:bg-transparent">
+                    <TableHead className="text-xs uppercase font-medium text-slate-400">Endpoint</TableHead>
+                    <TableHead className="text-xs uppercase font-medium text-slate-400">Method</TableHead>
+                    <TableHead className="text-xs uppercase font-medium text-slate-400">Status</TableHead>
+                    <TableHead className="text-xs uppercase font-medium text-slate-400">Latency</TableHead>
+                    <TableHead className="text-xs uppercase font-medium text-slate-400">24h Uptime</TableHead>
+                    <TableHead className="text-xs uppercase font-medium text-slate-400 text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {recentEndpoints.map((ep) => (
+                    <TableRow
+                      key={ep.id}
+                      className="border-border/50 hover:bg-slate-800/40 transition-colors"
+                    >
+                      <TableCell className="font-medium text-slate-100 max-w-[240px]">
+                        <div className="flex flex-col min-w-0">
+                          <Link
+                            href={`/dashboard/endpoints/${ep.id}`}
+                            className="hover:text-indigo-400 truncate transition-colors text-sm font-semibold"
+                          >
+                            {ep.name}
+                          </Link>
+                          <span className="text-xs text-muted-foreground truncate font-mono mt-0.5">
+                            {ep.url}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <MethodBadge method={ep.method} />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={ep.status} />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {ep.currentLatencyMs !== null && ep.currentLatencyMs !== undefined ? (
+                          <span
+                            className={
+                              ep.currentLatencyMs < 200
+                                ? "text-emerald-400 font-semibold"
+                                : ep.currentLatencyMs < 500
+                                ? "text-amber-400 font-semibold"
+                                : "text-rose-400 font-semibold"
+                            }
+                          >
+                            {Math.round(ep.currentLatencyMs)}ms
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">--</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-slate-300">
+                        {ep.uptime24h !== undefined ? `${ep.uptime24h}%` : "100.0%"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="icon-xs"
+                          className="text-slate-400 hover:text-white"
+                          title="View details"
+                          aria-label={`View details for ${ep.name}`}
+                        >
+                          <Link href={`/dashboard/endpoints/${ep.id}`}>
+                            <ExternalLink className="size-3.5" />
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile Card Feed (< 768px) */}
+            <div className="md:hidden divide-y divide-border/60">
+              {recentEndpoints.map((ep) => (
+                <div key={ep.id} className="p-3.5 space-y-2 hover:bg-slate-800/30 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5 min-w-0">
+                      <Link
+                        href={`/dashboard/endpoints/${ep.id}`}
+                        className="font-bold text-sm text-white hover:text-indigo-400 transition-colors block truncate"
+                      >
+                        {ep.name}
+                      </Link>
+                      <span className="text-xs text-slate-400 font-mono truncate block">
+                        {ep.url}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <MethodBadge method={ep.method} />
+                      <StatusBadge status={ep.status} />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-mono bg-slate-900/60 p-2 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-400 text-[10px] mr-1">Latency:</span>
+                      <span
+                        className={`font-semibold ${
+                          (ep.currentLatencyMs || 0) < 200
+                            ? "text-emerald-400"
+                            : (ep.currentLatencyMs || 0) < 500
+                            ? "text-amber-400"
+                            : "text-rose-400"
+                        }`}
+                      >
+                        {ep.currentLatencyMs !== null && ep.currentLatencyMs !== undefined
+                          ? `${Math.round(ep.currentLatencyMs)}ms`
+                          : "--"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 text-[10px] mr-1">Uptime:</span>
+                      <span className="text-slate-200 font-semibold">
+                        {ep.uptime24h !== undefined ? `${ep.uptime24h}%` : "100.0%"}
+                      </span>
+                    </div>
+
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="icon-xs"
+                      className="size-6 text-slate-400 hover:text-white"
+                      aria-label={`View details for ${ep.name}`}
+                    >
+                      <Link href={`/dashboard/endpoints/${ep.id}`}>
+                        <ExternalLink className="size-3" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

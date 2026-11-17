@@ -7,7 +7,6 @@ import {
   Menu,
   ChevronRight,
   Plus,
-  CheckCircle2,
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,7 +61,7 @@ export function Header({ onMobileMenuOpen }: HeaderProps) {
         <Button
           variant="ghost"
           size="icon-sm"
-          className="md:hidden text-slate-400 hover:text-slate-100"
+          className="md:hidden text-slate-400 hover:text-white size-8 rounded-lg hover:bg-slate-800/80 transition-colors"
           onClick={onMobileMenuOpen}
           aria-label="Open sidebar navigation"
         >
@@ -100,8 +99,11 @@ export function Header({ onMobileMenuOpen }: HeaderProps) {
       {/* Right: Quick System Status & Actions */}
       <div className="flex items-center gap-3">
         {/* Global Health Pill */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-          <CheckCircle2 className="size-3.5 text-emerald-400" />
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono shadow-[0_0_10px_rgba(16,185,129,0.12)]">
+          <span className="relative flex size-2 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
+            <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+          </span>
           <span className="hidden md:inline font-medium">All Systems Operational</span>
           <span className="md:hidden font-medium">Healthy</span>
         </div>

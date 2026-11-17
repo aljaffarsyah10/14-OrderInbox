@@ -103,18 +103,15 @@ export default function EditEndpointPage() {
   };
 
   const handleDelete = async () => {
-    if (confirm("Are you sure you want to permanently delete this monitor and all history?")) {
-      try {
-        await deleteEndpoint(id);
-        router.push("/dashboard/endpoints");
-        return true;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Failed to delete monitor";
-        alert(msg);
-        return false;
-      }
+    try {
+      await deleteEndpoint(id);
+      router.push("/dashboard/endpoints");
+      return true;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete monitor";
+      alert(msg);
+      return false;
     }
-    return false;
   };
 
   const handleTogglePause = async () => {

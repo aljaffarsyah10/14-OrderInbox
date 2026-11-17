@@ -14,6 +14,9 @@ import {
   Check,
   ExternalLink,
   RefreshCw,
+  Loader2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -50,7 +53,11 @@ export default function EndpointDetailPage() {
   const [historyPage, setHistoryPage] = React.useState(1);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCheckingNow, setIsCheckingNow] = React.useState(false);
-  const [checkResultToast, setCheckResultToast] = React.useState<string | null>(null);
+  const [feedback, setFeedback] = React.useState<{
+    type: "success" | "error";
+    message: string;
+    details?: string;
+  } | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [timeRange, setTimeRange] = React.useState<"24h" | "7d" | "30d">("24h");
 
@@ -150,15 +157,19 @@ export default function EndpointDetailPage() {
     loadHistoryChecks(newPage, timeRange);
   };
 
-  // Handle on-demand manual check trigger
+  // Handle on-demand manual check trigger with rich visual feedback
   const handleManualCheck = async () => {
     if (!id) return;
     setIsCheckingNow(true);
-    setCheckResultToast(null);
+    setFeedback(null);
 
     try {
       const res = await triggerManualCheck(id);
-      setCheckResultToast(res.message || "Manual check dispatched to monitoring queue.");
+      setFeedback({
+        type: "success",
+        message: res.message || "Manual check dispatched to monitoring worker.",
+        details: "Live execution completed. Telemetry and history records have been updated.",
+      });
 
       // Wait a moment for worker execution, then refresh checks from database
       setTimeout(async () => {
@@ -173,12 +184,15 @@ export default function EndpointDetailPage() {
       }, 1200);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to trigger manual check";
-      alert(msg);
+      setFeedback({
+        type: "error",
+        message: msg,
+      });
     } finally {
       setIsCheckingNow(false);
       setTimeout(() => {
-        setCheckResultToast(null);
-      }, 6000);
+        setFeedback(null);
+      }, 7000);
     }
   };
 
@@ -198,8 +212,9 @@ export default function EndpointDetailPage() {
           <Skeleton className="h-28 rounded-xl" />
           <Skeleton className="h-28 rounded-xl" />
         </div>
+        <Skeleton className="h-80 rounded-xl" />
+        <Skeleton className="h-32 rounded-xl" />
         <Skeleton className="h-72 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
@@ -214,7 +229,11 @@ export default function EndpointDetailPage() {
             `The requested monitor with identifier "${id}" does not exist or you do not have permission to view it.`
           }
           action={
-            <Button asChild size="sm" className="bg-indigo-600 hover:bg-indigo-500 text-white focus-visible:ring-2 focus-visible:ring-indigo-500">
+            <Button
+              asChild
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
               <Link href="/dashboard/endpoints">Return to Endpoints</Link>
             </Button>
           }
@@ -248,7 +267,7 @@ export default function EndpointDetailPage() {
               <StatusBadge status={endpoint.status} />
               <MethodBadge method={endpoint.method} />
             </div>
-            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono flex-wrap">
+            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1.5 font-mono flex-wrap">
               <a
                 href={endpoint.url}
                 target="_blank"
@@ -268,7 +287,7 @@ export default function EndpointDetailPage() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             type="button"
             variant="outline"
@@ -289,10 +308,23 @@ export default function EndpointDetailPage() {
             onClick={handleManualCheck}
             disabled={isCheckingNow}
             aria-label="Test request now"
-            className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 h-9 gap-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className={`h-9 gap-2 text-xs font-semibold transition-all duration-200 focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              isCheckingNow
+                ? "border-indigo-500/60 bg-indigo-500/20 text-indigo-200 shadow-md shadow-indigo-950/40"
+                : "border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10 hover:border-indigo-500/60"
+            }`}
           >
-            <Play className={`size-3.5 ${isCheckingNow ? "animate-spin" : ""}`} />
-            <span>{isCheckingNow ? "Dispatching Check..." : "Test Request Now"}</span>
+            {isCheckingNow ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin text-indigo-400" />
+                <span>Executing Probe...</span>
+              </>
+            ) : (
+              <>
+                <Play className="size-3.5 fill-indigo-400/30" />
+                <span>Test Request Now</span>
+              </>
+            )}
           </Button>
 
           <Button
@@ -310,14 +342,37 @@ export default function EndpointDetailPage() {
         </div>
       </div>
 
-      {/* Manual Check Result Notification */}
-      {checkResultToast && (
+      {/* Manual Check Result Notification Banner */}
+      {feedback && (
         <div
           role="status"
-          className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 flex items-center gap-2.5 text-xs font-mono animate-in fade-in duration-200"
+          className={`p-4 rounded-xl border flex items-start justify-between gap-3 text-xs font-mono shadow-lg animate-in fade-in slide-in-from-top-2 duration-200 ${
+            feedback.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 shadow-emerald-950/20"
+              : "bg-rose-500/10 border-rose-500/30 text-rose-300 shadow-rose-950/20"
+          }`}
         >
-          <Check className="size-4 text-emerald-400 shrink-0" />
-          <span>{checkResultToast}</span>
+          <div className="flex items-start gap-2.5">
+            {feedback.type === "success" ? (
+              <Check className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="size-4 text-rose-400 shrink-0 mt-0.5" />
+            )}
+            <div>
+              <div className="font-semibold text-white">{feedback.message}</div>
+              {feedback.details && (
+                <div className="text-[11px] opacity-80 mt-0.5">{feedback.details}</div>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
+            className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+            aria-label="Dismiss feedback"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
       )}
 
@@ -332,10 +387,10 @@ export default function EndpointDetailPage() {
           }
           subValue={
             (endpoint.currentLatencyMs || 0) < 200
-              ? "Fast (<200ms)"
-              : (endpoint.currentLatencyMs || 0) < 1000
-              ? "Normal latency"
-              : "High latency alert"
+              ? "Ultra fast (<200ms)"
+              : (endpoint.currentLatencyMs || 0) < 600
+              ? "Normal response"
+              : "High latency threshold"
           }
           trend={{
             value: (endpoint.currentLatencyMs || 0) < 200 ? "Healthy" : "Elevated",
@@ -348,7 +403,7 @@ export default function EndpointDetailPage() {
           value={
             endpoint.uptime24h !== null && endpoint.uptime24h !== undefined
               ? `${endpoint.uptime24h.toFixed(1)}%`
-              : "100%"
+              : "100.0%"
           }
           subValue="Target SLA: 99.9%"
           trend={{
@@ -376,8 +431,8 @@ export default function EndpointDetailPage() {
         />
       </div>
 
-      {/* Latency History Chart with P95 & Time Range */}
-      <div className="rounded-xl border border-border bg-card p-5">
+      {/* Latency History Chart with Dynamic Colors & P95 */}
+      <div className="rounded-xl border border-border/80 bg-card/90 p-5 md:p-6 backdrop-blur-xs shadow-lg shadow-black/20">
         <LatencyChart
           data={latencyData}
           timeRange={timeRange}
@@ -386,11 +441,11 @@ export default function EndpointDetailPage() {
       </div>
 
       {/* 90-Day Uptime Sparkline Card */}
-      <div className="rounded-xl border border-border bg-card p-5">
+      <div className="rounded-xl border border-border/80 bg-card/90 p-5 md:p-6 backdrop-blur-xs shadow-lg shadow-black/20">
         <UptimeBar days={uptimeDays} />
       </div>
 
-      {/* Execution Checks Table with Pagination & Time Range */}
+      {/* Execution Checks Table with Dual Mobile/Desktop Layout */}
       <ExecutionHistoryTable
         checks={checks}
         onRefresh={refreshAllData}

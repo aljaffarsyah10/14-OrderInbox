@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ExecutionHistoryTableProps {
@@ -48,9 +48,10 @@ export function ExecutionHistoryTable({
 
   return (
     <div className="space-y-3">
+      {/* Header Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-white">
+          <h3 className="text-base font-semibold text-white tracking-tight">
             Recent Check Execution Logs
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -58,9 +59,12 @@ export function ExecutionHistoryTable({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {timeRange && onTimeRangeChange && (
-            <div className="flex items-center rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-xs font-medium mr-2" role="tablist">
+            <div
+              className="flex items-center rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-xs font-medium"
+              role="tablist"
+            >
               {(["24h", "7d", "30d"] as const).map((range) => (
                 <button
                   key={range}
@@ -71,7 +75,7 @@ export function ExecutionHistoryTable({
                   onClick={() => onTimeRangeChange(range)}
                   className={`px-2 py-0.5 rounded font-mono text-[11px] transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                     timeRange === range
-                      ? "bg-indigo-600 text-white shadow-xs"
+                      ? "bg-indigo-600 text-white shadow-xs font-semibold"
                       : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
@@ -89,7 +93,7 @@ export function ExecutionHistoryTable({
               onClick={onRefresh}
               disabled={isLoading}
               aria-label="Refresh execution logs"
-              className="h-8 gap-1.5 text-xs text-slate-300 hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
+              className="h-8 gap-1.5 text-xs text-slate-300 hover:text-white border-border/80 focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
               <span>Refresh Logs</span>
@@ -98,21 +102,23 @@ export function ExecutionHistoryTable({
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* Main Container */}
+      <div className="rounded-xl border border-border/80 bg-card/90 overflow-hidden backdrop-blur-xs">
+        {/* Desktop View: Full Table (visible >= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <Table>
-            <TableHeader className="bg-slate-900/70">
+            <TableHeader className="bg-slate-900/80">
               <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="w-[180px] text-xs font-semibold text-slate-400 uppercase font-mono">
+                <TableHead className="w-[190px] text-xs font-semibold text-slate-400 uppercase font-mono">
                   Timestamp
                 </TableHead>
-                <TableHead className="w-[100px] text-xs font-semibold text-slate-400 uppercase font-mono">
+                <TableHead className="w-[110px] text-xs font-semibold text-slate-400 uppercase font-mono">
                   Result
                 </TableHead>
                 <TableHead className="w-[110px] text-xs font-semibold text-slate-400 uppercase font-mono text-center">
                   HTTP Code
                 </TableHead>
-                <TableHead className="w-[120px] text-xs font-semibold text-slate-400 uppercase font-mono text-right">
+                <TableHead className="w-[125px] text-xs font-semibold text-slate-400 uppercase font-mono text-right">
                   Response Time
                 </TableHead>
                 <TableHead className="text-xs font-semibold text-slate-400 uppercase font-mono">
@@ -133,7 +139,7 @@ export function ExecutionHistoryTable({
                   return (
                     <TableRow
                       key={check.id}
-                      className="border-border hover:bg-slate-800/40 transition-colors"
+                      className="border-border/60 hover:bg-slate-800/40 transition-colors"
                     >
                       <TableCell className="font-mono text-xs text-slate-300 whitespace-nowrap">
                         {new Date(check.checkedAt).toLocaleString()}
@@ -146,8 +152,8 @@ export function ExecutionHistoryTable({
                           <span
                             className={`px-2 py-0.5 rounded text-xs font-semibold border ${
                               check.httpStatus >= 200 && check.httpStatus < 300
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                : "bg-rose-500/10 text-rose-400 border-rose-500/25"
                             }`}
                           >
                             {check.httpStatus}
@@ -194,9 +200,83 @@ export function ExecutionHistoryTable({
           </Table>
         </div>
 
+        {/* Mobile View: Responsive Card Feed (< 768px) */}
+        <div className="md:hidden divide-y divide-border/60">
+          {checks.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-sm">
+              No execution checks recorded for this period.
+            </div>
+          ) : (
+            checks.map((check) => {
+              const isSuccess = check.status === "SUCCESS";
+              return (
+                <div key={check.id} className="p-3.5 space-y-2 hover:bg-slate-800/30 transition-colors">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+                      <Clock className="size-3 text-slate-500" />
+                      <span>{new Date(check.checkedAt).toLocaleString()}</span>
+                    </div>
+                    <StatusBadge status={isSuccess ? "UP" : "DOWN"} />
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-mono bg-slate-900/60 p-2 rounded-lg border border-slate-800/60">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400 text-[11px]">HTTP:</span>
+                      {check.httpStatus ? (
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[11px] font-semibold border ${
+                            check.httpStatus >= 200 && check.httpStatus < 300
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                              : "bg-rose-500/10 text-rose-400 border-rose-500/25"
+                          }`}
+                        >
+                          {check.httpStatus}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">---</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 text-[11px]">Latency:</span>
+                      <span
+                        className={`font-bold tabular-nums ${
+                          typeof check.responseTimeMs === "number" && check.responseTimeMs > 1500
+                            ? "text-amber-400"
+                            : typeof check.responseTimeMs === "number" && check.responseTimeMs > 5000
+                            ? "text-rose-400"
+                            : "text-emerald-400"
+                        }`}
+                      >
+                        {typeof check.responseTimeMs === "number"
+                          ? `${Math.round(check.responseTimeMs)}ms`
+                          : "--"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs font-mono pt-0.5">
+                    {isSuccess ? (
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+                        <span>Assertions passed</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-rose-400">
+                        <AlertTriangle className="size-3.5 text-rose-500 shrink-0" />
+                        <span>{check.errorMessage || "Failed health checks"}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
         {/* Pagination Footer */}
         {total > 0 && onPageChange && (
-          <div className="flex flex-col sm:flex-row items-center justify-between p-3.5 border-t border-border text-xs text-muted-foreground font-mono gap-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between p-3.5 border-t border-border text-xs text-muted-foreground font-mono gap-3 bg-slate-900/30">
             <span>
               Showing {from} - {to} of {total} checks
             </span>
@@ -212,7 +292,7 @@ export function ExecutionHistoryTable({
               >
                 <ChevronLeft className="size-3.5" />
               </Button>
-              <span className="px-2">
+              <span className="px-2 text-slate-300">
                 Page {page} of {totalPages}
               </span>
               <Button

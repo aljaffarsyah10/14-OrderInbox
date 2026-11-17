@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   endpointFormSchema,
   EndpointFormValues,
@@ -36,6 +37,8 @@ export function EndpointForm({
   const [testingStatus, setTestingStatus] = React.useState<"idle" | "testing" | "success" | "fail">("idle");
   const [testResult, setTestResult] = React.useState<string | null>(null);
   const [feedback, setFeedback] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   // Convert initial headers object to key-value array for useFieldArray
   const initialHeaderList = React.useMemo(() => {
@@ -568,15 +571,43 @@ export function EndpointForm({
               </p>
             </div>
             {onDeleteAction && (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={onDeleteAction}
-                className="shrink-0"
-              >
-                Delete Monitor
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  className="shrink-0 font-semibold shadow-md shadow-rose-950/30"
+                >
+                  <Trash2 className="size-3.5 mr-1.5" />
+                  <span>Delete Monitor</span>
+                </Button>
+
+                <ConfirmDialog
+                  open={isDeleteDialogOpen}
+                  onOpenChange={setIsDeleteDialogOpen}
+                  title="Delete Monitored Target"
+                  description={
+                    <span>
+                      Are you sure you want to permanently delete monitor{" "}
+                      <strong className="text-white font-mono">{initialData.name}</strong>? All
+                      historical telemetry, 90-day uptime logs, and alert rules will be permanently erased.
+                      This action cannot be undone.
+                    </span>
+                  }
+                  confirmLabel="Delete Monitor"
+                  isLoading={isDeleting}
+                  onConfirm={async () => {
+                    setIsDeleting(true);
+                    try {
+                      await onDeleteAction();
+                    } finally {
+                      setIsDeleting(false);
+                      setIsDeleteDialogOpen(false);
+                    }
+                  }}
+                />
+              </>
             )}
           </div>
         </div>
