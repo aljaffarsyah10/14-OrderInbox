@@ -1,0 +1,33 @@
+# Git & Version Control
+.git
+.gitignore
+
+# Local Environment & Secrets
+.env
+.env*.local
+.env.development
+.env.test
+
+# Dependencies & Build artifacts
+node_modules
+.next
+out
+build
+dist
+
+# Logs & Runtime cache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+.turbo
+*.tsbuildinfo
+
+# Test Coverage & Artifacts
+coverage
+tests
+
+# OS metadata
+.DS_Store
+Thumbs.db
