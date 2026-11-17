@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:EndpointHistory");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -71,7 +74,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
-    console.error("[GET /api/endpoints/[id]/history]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error retrieving endpoint check history", error);
     return errorResponse("Internal server error", "INTERNAL_SERVER_ERROR", 500);
   }
 }
+

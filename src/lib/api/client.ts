@@ -3,11 +3,9 @@
  * Provides unified fetch handling, credential forwarding, JSON parsing, and standard error handling.
  */
 
-export interface ApiErrorPayload {
-  code: string;
-  message: string;
-  details?: unknown;
-}
+import type { ApiErrorPayload } from "@/lib/api-response";
+
+export type { ApiErrorPayload };
 
 export class ApiClientError extends Error {
   public readonly code: string;
@@ -28,6 +26,7 @@ export interface StandardApiResponse<T = unknown> {
   data?: T;
   error?: ApiErrorPayload;
 }
+
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
   params?: Record<string, string | number | boolean | undefined | null>;

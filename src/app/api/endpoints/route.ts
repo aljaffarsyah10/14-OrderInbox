@@ -3,8 +3,12 @@ import { Prisma, MonitorStatus, HttpMethod } from "@prisma/client";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { apiEndpointInputSchema } from "@/lib/validation/endpoint.schema";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
 import { scheduleEndpointCheck } from "@/lib/queue/queues";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:Endpoints");
+
 
 export async function GET(req: NextRequest) {
   try {
@@ -91,10 +95,14 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[GET /api/endpoints]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error retrieving endpoints catalog", error);
     return errorResponse("Internal server error", "INTERNAL_SERVER_ERROR", 500);
   }
 }
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -155,7 +163,11 @@ export async function POST(req: NextRequest) {
 
     return successResponse(newEndpoint, 201);
   } catch (error) {
-    console.error("[POST /api/endpoints]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Failed to create endpoint", error);
     return errorResponse("Failed to create endpoint", "CREATE_FAILED", 500);
   }
 }
+

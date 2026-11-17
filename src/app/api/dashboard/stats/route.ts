@@ -1,11 +1,15 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:DashboardStats");
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth(req);
+
     if (!session || !session.user) {
       return errorResponse("Unauthorized", "UNAUTHORIZED", 401);
     }
@@ -100,7 +104,11 @@ export async function GET(req: NextRequest) {
       recentIncidents,
     });
   } catch (error) {
-    console.error("[GET /api/dashboard/stats]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Failed to fetch dashboard stats", error);
     return errorResponse("Failed to fetch dashboard stats", "STATS_ERROR", 500);
   }
 }
+

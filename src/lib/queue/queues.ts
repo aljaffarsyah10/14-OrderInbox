@@ -1,5 +1,8 @@
 import { Queue } from "bullmq";
 import { getRedisClient } from "./redis";
+import { logger } from "../logger";
+
+const queueLog = logger.child("Queue");
 
 export const MONITOR_CHECKS_QUEUE_NAME = "monitor-checks";
 export const ALERT_NOTIFICATIONS_QUEUE_NAME = "alert-notifications";
@@ -87,7 +90,7 @@ export async function scheduleEndpointCheck(endpointId: string, intervalSeconds:
     );
     return true;
   } catch (err) {
-    console.warn(`[Queue] Failed to schedule endpoint check for ${endpointId}:`, err);
+    queueLog.warn(`Failed to schedule endpoint check for ${endpointId}`, err);
     return false;
   }
 }
@@ -101,7 +104,7 @@ export async function removeEndpointCheck(endpointId: string): Promise<boolean> 
     await queue.removeJobScheduler(`endpoint:${endpointId}`);
     return true;
   } catch (err) {
-    console.warn(`[Queue] Failed to remove repeatable check for ${endpointId}:`, err);
+    queueLog.warn(`Failed to remove repeatable check for ${endpointId}`, err);
     return false;
   }
 }
@@ -122,7 +125,7 @@ export async function triggerManualCheck(endpointId: string): Promise<boolean> {
     );
     return true;
   } catch (err) {
-    console.warn(`[Queue] Failed to enqueue manual check for ${endpointId}:`, err);
+    queueLog.warn(`Failed to enqueue manual check for ${endpointId}`, err);
     return false;
   }
 }
@@ -138,7 +141,8 @@ export async function enqueueAlertNotification(data: AlertNotificationJobData): 
     });
     return true;
   } catch (err) {
-    console.warn(`[Queue] Failed to enqueue alert for ${data.endpointId}:`, err);
+    queueLog.warn(`Failed to enqueue alert for ${data.endpointId}`, err);
     return false;
   }
 }
+

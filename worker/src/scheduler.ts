@@ -1,5 +1,8 @@
 import { prisma } from "../../src/lib/db/prisma";
 import { getMonitorQueue, scheduleEndpointCheck, removeEndpointCheck } from "../../src/lib/queue/queues";
+import { logger } from "../../src/lib/logger";
+
+const schedulerLog = logger.child("Scheduler");
 
 /**
  * Synchronizes database endpoints with BullMQ repeatable jobs.
@@ -10,7 +13,7 @@ export async function syncAllActiveEndpoints(): Promise<{
   syncedCount: number;
   removedCount: number;
 }> {
-  console.log("[Scheduler] Synchronizing endpoint monitoring schedules from PostgreSQL...");
+  schedulerLog.info("Synchronizing endpoint monitoring schedules from PostgreSQL...");
   let syncedCount = 0;
   let removedCount = 0;
 
@@ -51,11 +54,11 @@ export async function syncAllActiveEndpoints(): Promise<{
       }
     }
 
-    console.log(
-      `[Scheduler] Synchronization complete: ${syncedCount} active monitors scheduled, ${removedCount} stale jobs removed.`
+    schedulerLog.info(
+      `Synchronization complete: ${syncedCount} active monitors scheduled, ${removedCount} stale jobs removed.`
     );
   } catch (err) {
-    console.warn("[Scheduler] Warning during schedule synchronization:", err);
+    schedulerLog.warn("Warning during schedule synchronization", err);
   }
 
   return { syncedCount, removedCount };

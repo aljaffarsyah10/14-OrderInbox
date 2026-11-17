@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
 import { triggerManualCheck } from "@/lib/queue/queues";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:ManualCheck");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,7 +39,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       endpointId: id,
     });
   } catch (error) {
-    console.error("[POST /api/endpoints/[id]/check]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Failed to trigger check", error);
     return errorResponse("Failed to trigger check", "TRIGGER_FAILED", 500);
   }
 }
+

@@ -2,8 +2,12 @@ import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { apiEndpointUpdateSchema } from "@/lib/validation/endpoint.schema";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
 import { scheduleEndpointCheck, removeEndpointCheck } from "@/lib/queue/queues";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:EndpointDetail");
+
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -51,10 +55,14 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       uptime24h,
     });
   } catch (error) {
-    console.error("[GET /api/endpoints/[id]]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error retrieving endpoint detail", error);
     return errorResponse("Internal server error", "INTERNAL_SERVER_ERROR", 500);
   }
 }
+
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
@@ -115,10 +123,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         await tx.endpointConfiguration.upsert({
           where: { endpointId: id },
           update: {
-            headers: data.headers !== undefined ? data.headers ?? undefined : undefined,
-            body: data.body !== undefined ? data.body ?? undefined : undefined,
-            headerRules: data.headerRules !== undefined ? data.headerRules ?? undefined : undefined,
-            bodyRules: data.bodyRules !== undefined ? data.bodyRules ?? undefined : undefined,
+            headers: data.headers !== undefined ? (data.headers ?? undefined) : undefined,
+            body: data.body !== undefined ? (data.body ?? undefined) : undefined,
+            headerRules: data.headerRules !== undefined ? (data.headerRules ?? undefined) : undefined,
+            bodyRules: data.bodyRules !== undefined ? (data.bodyRules ?? undefined) : undefined,
           },
           create: {
             endpointId: id,
@@ -143,10 +151,14 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     return successResponse(updated);
   } catch (error) {
-    console.error("[PUT /api/endpoints/[id]]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error updating endpoint", error);
     return errorResponse("Update failed", "UPDATE_FAILED", 500);
   }
 }
+
 
 export async function PATCH(req: NextRequest, ctx: RouteParams) {
   return PUT(req, ctx);
@@ -182,7 +194,11 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
     return successResponse({ deleted: true, id });
   } catch (error) {
-    console.error("[DELETE /api/endpoints/[id]]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error deleting endpoint", error);
     return errorResponse("Delete failed", "DELETE_FAILED", 500);
   }
 }
+

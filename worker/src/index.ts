@@ -8,13 +8,14 @@ import {
   MonitorCheckJobData,
   AlertNotificationJobData,
 } from "../../src/lib/queue/queues";
-import { runEndpointMonitoring } from "./monitoring/monitor-engine";
-import { validateTargetUrl } from "./monitoring/url-security";
+import { runEndpointMonitoring } from "../../src/lib/monitoring/monitor-engine";
+import { validateTargetUrl } from "../../src/lib/monitoring/url-security";
 import { syncAllActiveEndpoints } from "./scheduler";
+import { logger } from "../../src/lib/logger";
 
-console.log("=========================================");
-console.log("   OrderInbox Background Worker Starting  ");
-console.log("=========================================");
+const workerLog = logger.child("Worker");
+
+workerLog.info("OrderInbox Background Worker Starting");
 
 // Setup Nodemailer transporter
 const emailTransporter = nodemailer.createTransport({
@@ -37,14 +38,14 @@ const monitorWorker = new Worker<MonitorCheckJobData>(
     const startedAt = Date.now();
 
     try {
-      console.log(
-        `[Worker] Processing ${trigger} check for endpoint: ${endpointId} (Job ID: ${job.id})`
+      workerLog.info(
+        `Processing ${trigger} check for endpoint: ${endpointId} (Job ID: ${job.id})`
       );
 
       const result = await runEndpointMonitoring(endpointId);
 
-      console.log(
-        `[Worker] Check completed for ${endpointId}: status=${result.httpStatus ?? "N/A"}, latency=${
+      workerLog.info(
+        `Check completed for ${endpointId}: status=${result.httpStatus ?? "N/A"}, latency=${
           result.latencyMs
         }ms, success=${result.success}, transition=${result.statusTransition} in ${
           Date.now() - startedAt
@@ -53,8 +54,7 @@ const monitorWorker = new Worker<MonitorCheckJobData>(
 
       return result;
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error(`[Worker] Error processing endpoint check ${endpointId}:`, errorMsg);
+      workerLog.error(`Error processing endpoint check ${endpointId}`, err);
       throw err;
     }
   },
@@ -65,7 +65,7 @@ const monitorWorker = new Worker<MonitorCheckJobData>(
 );
 
 monitorWorker.on("failed", (job, err) => {
-  console.error(`[Worker] Job ${job?.id} failed:`, err.message);
+  workerLog.error(`Job ${job?.id} failed`, err);
 });
 
 // 2. Alert Notifications Worker
@@ -75,7 +75,7 @@ const alertWorker = new Worker<AlertNotificationJobData>(
     const { alertId, endpointId, userId, type, message } = job.data;
 
     try {
-      console.log(`[Alert Worker] Dispatching alert ${alertId} (${type}) for user ${userId}`);
+      workerLog.info(`Dispatching alert ${alertId} (${type}) for user ${userId}`);
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -87,7 +87,7 @@ const alertWorker = new Worker<AlertNotificationJobData>(
       });
 
       if (!user || !user.email) {
-        console.warn(`[Alert Worker] User ${userId} not found or has no email address`);
+        workerLog.warn(`User ${userId} not found or has no email address`);
         return;
       }
 
@@ -114,7 +114,7 @@ const alertWorker = new Worker<AlertNotificationJobData>(
           </div>`,
         });
       } else {
-        console.log(`[Alert Worker - Mock Dispatch] Email dispatched to [${recipients.join(", ")}]: "${message}"`);
+        workerLog.info(`Mock Email dispatched to [${recipients.join(", ")}]: "${message}"`);
       }
 
       // Webhook dispatch if configured and enabled
@@ -139,12 +139,12 @@ const alertWorker = new Worker<AlertNotificationJobData>(
               }),
               signal: AbortSignal.timeout(5000),
             });
-            console.log(`[Alert Worker] Webhook successfully delivered to ${webhookUrl}`);
+            workerLog.info(`Webhook successfully delivered to ${webhookUrl}`);
           } catch (webhookErr) {
-            console.warn(`[Alert Worker] Webhook delivery failed to ${webhookUrl}:`, webhookErr);
+            workerLog.warn(`Webhook delivery failed to ${webhookUrl}`, webhookErr);
           }
         } else {
-          console.warn(`[Alert Worker] Webhook blocked by SSRF filter: ${security.error}`);
+          workerLog.warn(`Webhook blocked by SSRF filter: ${security.error}`);
         }
       }
 
@@ -157,9 +157,9 @@ const alertWorker = new Worker<AlertNotificationJobData>(
         },
       });
 
-      console.log(`[Alert Worker] Alert ${alertId} successfully marked as SENT`);
+      workerLog.info(`Alert ${alertId} successfully marked as SENT`);
     } catch (err: unknown) {
-      console.error(`[Alert Worker] Failed to send alert ${alertId}:`, err);
+      workerLog.error(`Failed to send alert ${alertId}`, err);
       await prisma.alert.update({
         where: { id: alertId },
         data: { status: "FAILED" },
@@ -174,16 +174,16 @@ const alertWorker = new Worker<AlertNotificationJobData>(
 );
 
 alertWorker.on("failed", (job, err) => {
-  console.error(`[Alert Worker] Alert notification job ${job?.id} failed:`, err.message);
+  workerLog.error(`Alert notification job ${job?.id} failed`, err);
 });
 
 // Startup Routine
 async function start() {
   try {
     await syncAllActiveEndpoints();
-    console.log("[Worker] Background worker and queues are active and listening.");
+    workerLog.info("Background worker and queues are active and listening.");
   } catch (err) {
-    console.error("[Worker] Initialization error:", err);
+    workerLog.error("Initialization error", err);
   }
 }
 
@@ -191,15 +191,15 @@ start();
 
 // Graceful Shutdown
 async function shutdown(signal: string) {
-  console.log(`[Worker] Received ${signal}. Shutting down worker gracefully...`);
+  workerLog.info(`Received ${signal}. Shutting down worker gracefully...`);
   try {
     await monitorWorker.close();
     await alertWorker.close();
     await prisma.$disconnect();
-    console.log("[Worker] Cleanup completed. Exiting process.");
+    workerLog.info("Cleanup completed. Exiting process.");
     process.exit(0);
   } catch (err) {
-    console.error("[Worker] Error during shutdown:", err);
+    workerLog.error("Error during shutdown", err);
     process.exit(1);
   }
 }

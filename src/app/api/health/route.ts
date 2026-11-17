@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { redis } from "@/lib/queue/redis";
 
 export async function GET() {
+
   const timestamp = new Date().toISOString();
   let dbStatus = "healthy";
   let redisStatus = "healthy";

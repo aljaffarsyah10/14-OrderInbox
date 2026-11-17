@@ -2,7 +2,11 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:Settings");
+
 
 const settingsUpdateSchema = z.object({
   name: z.string().min(1, "Name cannot be empty").max(100).optional(),
@@ -67,10 +71,14 @@ export async function GET(req: NextRequest) {
       settings,
     });
   } catch (error) {
-    console.error("[GET /api/settings]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error retrieving user settings", error);
     return errorResponse("Internal server error", "INTERNAL_SERVER_ERROR", 500);
   }
 }
+
 
 export async function PUT(req: NextRequest) {
   try {
@@ -153,7 +161,11 @@ export async function PUT(req: NextRequest) {
 
     return successResponse(result);
   } catch (error) {
-    console.error("[PUT /api/settings]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Error updating settings", error);
     return errorResponse("Failed to update settings", "UPDATE_FAILED", 500);
   }
 }
+

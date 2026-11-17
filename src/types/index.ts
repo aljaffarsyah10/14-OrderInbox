@@ -1,6 +1,12 @@
+import { z } from "zod";
+import {
+  headerItemSchema,
+  headerRuleSchema,
+  bodyRuleSchema,
+} from "@/lib/validation/endpoint.schema";
+
 /**
  * Core Domain & Feature Types for OrderInbox
- * Note: These types represent the domain entities across frontend and mock services.
  */
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
@@ -9,28 +15,10 @@ export type EndpointStatus = "PENDING" | "UP" | "DOWN" | "PAUSED";
 
 export type CheckResultStatus = "SUCCESS" | "FAILED";
 
-export interface HeaderItem {
-  key: string;
-  value: string;
-}
+export type HeaderItem = z.infer<typeof headerItemSchema>;
+export type HeaderRule = z.infer<typeof headerRuleSchema>;
+export type BodyRule = z.infer<typeof bodyRuleSchema>;
 
-export interface HeaderRule {
-  header: string;
-  operator: "CONTAINS" | "EQUALS" | "NOT_CONTAINS";
-  value: string;
-}
-
-export interface BodyRule {
-  type:
-    | "JSON_PROPERTY_EQUALS"
-    | "BODY_CONTAINS"
-    | "BODY_REGEX"
-    | "CONTAINS_TEXT"
-    | "NOT_CONTAINS_TEXT"
-    | "JSON_PROPERTY_EXISTS";
-  path?: string;
-  value: string;
-}
 
 export interface EndpointConfiguration {
   id: string;

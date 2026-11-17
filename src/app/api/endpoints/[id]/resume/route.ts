@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
 import { scheduleEndpointCheck } from "@/lib/queue/queues";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:ResumeEndpoint");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -39,7 +42,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     await scheduleEndpointCheck(id, updated.intervalSeconds);
     return successResponse(updated);
   } catch (error) {
-    console.error("[POST /api/endpoints/[id]/resume]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Failed to resume endpoint", error);
     return errorResponse("Failed to resume endpoint", "RESUME_FAILED", 500);
   }
 }
+

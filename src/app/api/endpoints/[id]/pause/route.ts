@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
-import { successResponse, errorResponse } from "@/lib/api-response";
+import { successResponse, errorResponse, isNextBailoutError } from "@/lib/api-response";
 import { scheduleEndpointCheck, removeEndpointCheck } from "@/lib/queue/queues";
+import { logger } from "@/lib/logger";
+
+const apiLog = logger.child("API:PauseEndpoint");
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -55,7 +58,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return successResponse(updated);
     }
   } catch (error) {
-    console.error("[POST /api/endpoints/[id]/pause]", error);
+    if (isNextBailoutError(error)) {
+      throw error;
+    }
+    apiLog.error("Failed to toggle pause status", error);
     return errorResponse("Failed to toggle pause status", "PAUSE_FAILED", 500);
   }
 }
+
