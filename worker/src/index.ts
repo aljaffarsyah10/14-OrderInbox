@@ -9,6 +9,7 @@ import {
   AlertNotificationJobData,
 } from "../../src/lib/queue/queues";
 import { runEndpointMonitoring } from "./monitoring/monitor-engine";
+import { validateTargetUrl } from "./monitoring/url-security";
 import { syncAllActiveEndpoints } from "./scheduler";
 
 console.log("=========================================");
@@ -78,7 +79,11 @@ const alertWorker = new Worker<AlertNotificationJobData>(
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { email: true, name: true },
+        select: {
+          email: true,
+          name: true,
+          settings: true,
+        },
       });
 
       if (!user || !user.email) {
@@ -86,13 +91,19 @@ const alertWorker = new Worker<AlertNotificationJobData>(
         return;
       }
 
+      // Determine recipients from user settings or fallback to primary email
+      const recipients =
+        user.settings?.alertEmails && user.settings.alertEmails.length > 0
+          ? user.settings.alertEmails
+          : [user.email];
+
       // If in development or mock mode without SMTP
       const isEmailConfigured = Boolean(process.env.SMTP_USER || process.env.EMAIL_PROVIDER_API_KEY);
 
       if (isEmailConfigured) {
         await emailTransporter.sendMail({
           from: process.env.EMAIL_FROM || "notifications@orderinbox.local",
-          to: user.email,
+          to: recipients.join(", "),
           subject: `[OrderInbox Alert] Monitor ${type}: ${message}`,
           text: `Hello ${user.name},\n\nYour monitored service has changed status:\n\n${message}\n\nEndpoint ID: ${endpointId}\nTime: ${new Date().toISOString()}`,
           html: `<div style="font-family: sans-serif; padding: 20px;">
@@ -103,7 +114,38 @@ const alertWorker = new Worker<AlertNotificationJobData>(
           </div>`,
         });
       } else {
-        console.log(`[Alert Worker - Mock Dispatch] Email dispatched to ${user.email}: "${message}"`);
+        console.log(`[Alert Worker - Mock Dispatch] Email dispatched to [${recipients.join(", ")}]: "${message}"`);
+      }
+
+      // Webhook dispatch if configured and enabled
+      if (user.settings?.webhookEnabled && user.settings?.webhookUrl) {
+        const webhookUrl = user.settings.webhookUrl;
+        const security = await validateTargetUrl(webhookUrl);
+        if (security.isValid) {
+          try {
+            await fetch(webhookUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "User-Agent": "OrderInbox-Webhook/1.0",
+              },
+              body: JSON.stringify({
+                event: type === "DOWN" ? "endpoint.down" : "endpoint.recovered",
+                endpointId,
+                alertId,
+                type,
+                message,
+                timestamp: new Date().toISOString(),
+              }),
+              signal: AbortSignal.timeout(5000),
+            });
+            console.log(`[Alert Worker] Webhook successfully delivered to ${webhookUrl}`);
+          } catch (webhookErr) {
+            console.warn(`[Alert Worker] Webhook delivery failed to ${webhookUrl}:`, webhookErr);
+          }
+        } else {
+          console.warn(`[Alert Worker] Webhook blocked by SSRF filter: ${security.error}`);
+        }
       }
 
       // Mark alert as SENT

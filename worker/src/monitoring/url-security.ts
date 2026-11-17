@@ -70,34 +70,144 @@ export function isPrivateIPv4(ip: string): boolean {
 }
 
 /**
+ * Parses an IPv6 address into an array of 8 16-bit word numbers (0 - 0xffff).
+ * Handles standard groups, compressed groups (::), and embedded IPv4 suffixes.
+ */
+export function parseIPv6ToWords(ip: string): number[] | null {
+  const cleanIp = ip.trim().toLowerCase();
+
+  let hexPart = cleanIp;
+  let embeddedV4Words: number[] = [];
+
+  const lastColonIndex = cleanIp.lastIndexOf(":");
+  if (lastColonIndex !== -1) {
+    const potentialV4 = cleanIp.slice(lastColonIndex + 1);
+    if (net.isIPv4(potentialV4)) {
+      const v4Parts = potentialV4.split(".").map(Number);
+      embeddedV4Words = [
+        (v4Parts[0] << 8) | v4Parts[1],
+        (v4Parts[2] << 8) | v4Parts[3],
+      ];
+      hexPart = cleanIp.slice(0, lastColonIndex);
+    }
+  }
+
+  const doubleColonParts = hexPart.split("::");
+  if (doubleColonParts.length > 2) {
+    return null; // Invalid IPv6 with multiple '::'
+  }
+
+  const words: number[] = [];
+
+  if (doubleColonParts.length === 2) {
+    const [leftStr, rightStr] = doubleColonParts;
+    const leftGroups = leftStr ? leftStr.split(":") : [];
+    const rightGroups = rightStr ? rightStr.split(":") : [];
+
+    const totalGroupsKnown = leftGroups.length + rightGroups.length + embeddedV4Words.length;
+    if (totalGroupsKnown > 8) return null;
+    const missingZeros = 8 - totalGroupsKnown;
+
+    for (const g of leftGroups) {
+      const val = parseInt(g, 16);
+      if (isNaN(val) || val < 0 || val > 0xffff) return null;
+      words.push(val);
+    }
+    for (let i = 0; i < missingZeros; i++) {
+      words.push(0);
+    }
+    for (const g of rightGroups) {
+      const val = parseInt(g, 16);
+      if (isNaN(val) || val < 0 || val > 0xffff) return null;
+      words.push(val);
+    }
+    words.push(...embeddedV4Words);
+  } else {
+    const groups = hexPart.split(":");
+    if (groups.length + embeddedV4Words.length !== 8) return null;
+    for (const g of groups) {
+      const val = parseInt(g, 16);
+      if (isNaN(val) || val < 0 || val > 0xffff) return null;
+      words.push(val);
+    }
+    words.push(...embeddedV4Words);
+  }
+
+  if (words.length !== 8) return null;
+  return words;
+}
+
+/**
  * Checks if an IPv6 address is in a private, loopback, or reserved range.
+ * Decodes all 128 bits to protect against uncompressed or zero-padded bypasses.
  */
 export function isPrivateIPv6(ip: string): boolean {
-  const normalized = ip.toLowerCase();
+  const words = parseIPv6ToWords(ip);
+  if (!words) {
+    return true; // Malformed IPv6 treated as blocked by default
+  }
 
-  // Loopback ::1
-  if (normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") return true;
-
-  // Unspecified ::
-  if (normalized === "::" || normalized === "0:0:0:0:0:0:0:0") return true;
-
-  // IPv4-mapped IPv6 (::ffff:127.0.0.1 or ::ffff:7f00:1)
-  if (normalized.startsWith("::ffff:")) {
-    const v4Part = normalized.slice(7);
-    if (net.isIPv4(v4Part)) {
-      return isPrivateIPv4(v4Part);
-    }
+  // 1. Loopback ::1
+  if (words.slice(0, 7).every((w) => w === 0) && words[7] === 1) {
     return true;
   }
 
-  // Unique Local Address fc00::/7 (fc00... or fd00...)
-  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
+  // 2. Unspecified ::
+  if (words.every((w) => w === 0)) {
+    return true;
+  }
 
-  // Link-Local fe80::/10 (fe8, fe9, fea, feb)
-  if (/^fe[89ab]/i.test(normalized)) return true;
+  // 3. IPv4-mapped IPv6 (::ffff:0:0/96 or ::ffff:a.b.c.d)
+  if (
+    words[0] === 0 &&
+    words[1] === 0 &&
+    words[2] === 0 &&
+    words[3] === 0 &&
+    words[4] === 0 &&
+    words[5] === 0xffff
+  ) {
+    const b0 = (words[6] >> 8) & 0xff;
+    const b1 = words[6] & 0xff;
+    const b2 = (words[7] >> 8) & 0xff;
+    const b3 = words[7] & 0xff;
+    return isPrivateIPv4(`${b0}.${b1}.${b2}.${b3}`);
+  }
 
-  // IPv6 Documentation prefix 2001:db8::/32
-  if (normalized.startsWith("2001:db8:") || normalized.startsWith("2001:0db8:")) return true;
+  // 4. IPv4-compatible IPv6 (::a.b.c.d - deprecated)
+  if (
+    words[0] === 0 &&
+    words[1] === 0 &&
+    words[2] === 0 &&
+    words[3] === 0 &&
+    words[4] === 0 &&
+    words[5] === 0
+  ) {
+    const b0 = (words[6] >> 8) & 0xff;
+    const b1 = words[6] & 0xff;
+    const b2 = (words[7] >> 8) & 0xff;
+    const b3 = words[7] & 0xff;
+    return isPrivateIPv4(`${b0}.${b1}.${b2}.${b3}`);
+  }
+
+  // 5. Unique Local Address (ULA) fc00::/7 (fc00... - fdff...)
+  if ((words[0] & 0xfe00) === 0xfc00) {
+    return true;
+  }
+
+  // 6. Link-Local Unicast fe80::/10 (fe80... - febf...)
+  if ((words[0] & 0xffc0) === 0xfe80) {
+    return true;
+  }
+
+  // 7. IPv6 Documentation prefix 2001:db8::/32
+  if (words[0] === 0x2001 && words[1] === 0x0db8) {
+    return true;
+  }
+
+  // 8. Multicast ff00::/8
+  if ((words[0] & 0xff00) === 0xff00) {
+    return true;
+  }
 
   return false;
 }
